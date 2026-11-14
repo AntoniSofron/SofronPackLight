@@ -11,7 +11,7 @@ import pl.sofron.light.runtime.LightTracker;
 import pl.sofron.light.runtime.LiveLightProbe;
 import pl.sofron.light.runtime.LightDiagnostics;
 
-/** Development-only: tracks moving light sources. No GPU renderer is installed. */
+/** Tracks sources and publishes the local lighting field to the Sodium terrain renderer. */
 public final class SofronPackLightClient implements ClientModInitializer {
     public static final LightTracker LIGHTS = new LightTracker();
     public static final pl.sofron.light.runtime.DynamicVoxelController VOXELS = new pl.sofron.light.runtime.DynamicVoxelController();
@@ -28,6 +28,6 @@ public final class SofronPackLightClient implements ClientModInitializer {
             diagnostics.tick(client, LIGHTS, CONFIG);
         });
         ClientLifecycleEvents.CLIENT_STOPPING.register(client -> pl.sofron.light.render.gpu.SodiumRenderPassCoordinator.close());
-        System.out.println("[Sofron Pack Light] Dynamic lights and live-world RGB probing active; Sodium GPU upload hook installed (surface shader consumption still pending).");
+        System.out.println("[Sofron Pack Light] Sodium terrain lighting initialized.");
     }
 }

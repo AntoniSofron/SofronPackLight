@@ -46,7 +46,7 @@ public final class DynamicVoxelField {
                 int level=Byte.toUnsignedInt(seen[at]);
                 if(level>brightness[at])brightness[at]=level;
                 int vx=at%SIZE, vy=at/(SIZE*SIZE), vz=(at/SIZE)%SIZE;
-                int dist=Math.abs(vx-sx)+Math.abs(vy-sy)+Math.abs(vz-sz);
+                int dist=sourceLevel - level;
                 if(dist<=Math.max(0,emitter.tintRange)) {
                     // Preserve chromatic hue, distinct from the neutral brightness.
                     // Max aggregation avoids turning same-color clusters white.

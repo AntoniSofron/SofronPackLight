@@ -32,13 +32,13 @@ public final class DynamicEmitterRegistry {
         }
         if(cfg.entityAndItemLighting) {
             for(Entity entity:client.level.entitiesForRendering()) {
-                if(entity==player || entity.distanceToSqr(player.getX(),player.getY(),player.getZ())>28*28)continue;
+                if(entity.distanceToSqr(player.getX(),player.getY(),player.getZ())>28*28)continue;
                 double x=entity.getX(), y=entity.getY()+entity.getBbHeight()*.55, z=entity.getZ();
                 if(cfg.burningEntities && entity.isOnFire())
-                    collected.add(new Source(x,y,z,12,255,108,31,3));
+                    collected.add(new Source(x,y,z,12,cfg.coloredLighting ? 255 : 0,cfg.coloredLighting ? 108 : 0,cfg.coloredLighting ? 31 : 0,8));
                 if(cfg.droppedItems && entity instanceof ItemEntity drop)
                     add(collected,drop.getItem(),x,entity.getY()+.2,z,cfg);
-                if(cfg.heldItems && entity instanceof LivingEntity living) {
+                if(cfg.heldItems && entity != player && entity instanceof LivingEntity living) {
                     add(collected,living.getMainHandItem(),x,y,z,cfg);
                     add(collected,living.getOffhandItem(),x,y,z,cfg);
                 }
@@ -46,7 +46,7 @@ public final class DynamicEmitterRegistry {
         }
         collected.sort(Comparator.comparingDouble(s -> squared(s.x()-player.getX(),s.y()-player.getY(),s.z()-player.getZ())));
         // Limit only emitters contributing to the local 33^3 voxel window.
-        sources=List.copyOf(collected.subList(0,Math.min(collected.size(),64)));
+        sources=List.copyOf(collected.subList(0,Math.min(collected.size(),Math.min(64, cfg.maximumDynamicLights))));
     }
     private static double squared(double x,double y,double z){return x*x+y*y+z*z;}
     private static void add(List<Source> result,ItemStack item,double x,double y,double z,LightConfig cfg){
@@ -59,7 +59,7 @@ public final class DynamicEmitterRegistry {
         if(emission<=0)return;
         RgbLight hue=rule!=null && cfg.coloredLighting?rule.color():BlockLightRules.neutral();
         float power=rule!=null && cfg.coloredLighting ? rule.intensity():0f;
-        int radius=rule==null?0:Math.max(0,Math.min(15,Math.round(BlockLightRules.tintRadius(rule,0f,emission))));
+        int radius=rule==null?0:Math.max(0,Math.min(15,Math.round(BlockLightRules.tintRadius(rule,(float) cfg.dynamicLightRadius,emission))));
         result.add(new Source(x,y,z,Math.min(emission,15),
             Math.round(255*hue.red()*power),Math.round(255*hue.green()*power),Math.round(255*hue.blue()*power),radius));
     }

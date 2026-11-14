@@ -2,12 +2,12 @@
   "schemaVersion": 1,
   "id": "sofron_pack_light",
   "version": "${version}",
-  "name": "26.3 Sofron Pack Light v0.1",
-  "description": "Vanilla-light dynamic lighting mod for Minecraft 26.3.",
+  "name": "Sofron Pack Light",
+  "description": "Dynamic colored terrain lighting for Minecraft 26.3 with Sodium.",
   "authors": [
     "Sofron Pack"
   ],
-  "environment": "*",
+  "environment": "client",
   "entrypoints": {
     "client": [
       "pl.sofron.light.SofronPackLightClient"
@@ -20,7 +20,8 @@
     "fabricloader": ">=0.19.5",
     "minecraft": "26.3",
     "java": ">=25",
-    "fabric-api": "*"
+    "fabric-api": "*",
+    "sodium": "=0.9.2"
   },
   "mixins": [
     "sofron.mixins.json"

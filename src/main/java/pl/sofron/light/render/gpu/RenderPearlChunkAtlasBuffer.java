@@ -23,15 +23,15 @@ public final class RenderPearlChunkAtlasBuffer implements AutoCloseable {
             if (buffer != null) buffer.close();
             capacityBytes=size;
             buffer=device.createBuffer(() -> "Sofron RGB chunk-indexed atlas",
-                GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_COPY_DST, capacityBytes);
+                GpuBuffer.USAGE_UNIFORM_TEXEL_BUFFER | GpuBuffer.USAGE_COPY_DST, capacityBytes);
         }
         CommandEncoder encoder=device.createCommandEncoder();
-        encoder.writeToBuffer(buffer.slice(), data);
+        encoder.writeToBuffer(buffer.slice(0, size), data);
         encoder.submit();
         ready=true;
     }
     public void bind(RenderPass pass) {
-        if (ready && buffer != null) pass.setUniform("SofronLightAtlas", buffer.slice());
+        if (ready && buffer != null) pass.setUniform("SofronLightAtlas", buffer);
     }
     @Override public void close() {
         ready=false;

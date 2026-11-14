@@ -205,13 +205,16 @@ public final class ChunkLightIndex {
 
     private static List<LightSource> scanChunk(Minecraft client, LightConfig cfg, int cx, int cz) {
         List<LightSource> found = new ArrayList<>();
-        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
-        // Vanilla vertical build bounds; the prototype will need dimension-specific bounds.
-        for (int y = -64; y < 320; y++) {
-            for (int dx=0; dx<16; dx++) for (int dz=0; dz<16; dz++) {
-                int x = (cx << 4) + dx, z = (cz << 4) + dz;
-                pos.set(x,y,z);
-                var state = client.level.getBlockState(pos);
+        var chunk = client.level.getChunkSource().getChunkNow(cx, cz);
+        if (chunk == null || !cfg.coloredLighting) return List.of();
+        for (int sectionIndex = 0; sectionIndex < chunk.getSections().length; sectionIndex++) {
+            var section = chunk.getSection(sectionIndex);
+            if (section.hasOnlyAir() || !section.maybeHas(state -> state.getLightEmission() > 0)) continue;
+            int baseY = chunk.getSectionYFromSectionIndex(sectionIndex) << 4;
+            for (int dy=0; dy<16; dy++) for (int dx=0; dx<16; dx++) for (int dz=0; dz<16; dz++) {
+                var state = section.getBlockState(dx, dy, dz);
+                if (state.getLightEmission() == 0) continue;
+                int x = (cx << 4) + dx, y = baseY + dy, z = (cz << 4) + dz;
                 String id = BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString();
                 var rule = BlockLightRules.rule(id);
                 // No rule means vanilla neutral light: no recoloring is necessary.

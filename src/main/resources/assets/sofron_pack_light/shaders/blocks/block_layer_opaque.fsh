@@ -12,7 +12,10 @@ layout(location = 3) in float fadeFactor;
 
 layout(location = 4) in vec3 spl_SurfaceCameraPos;
 layout(location = 5) in float spl_Sunlit;
-layout(location = 6) in float spl_BlockLightCoord;
+layout(location = 6) in vec2 spl_LightCoord;
+#ifndef OIT_ALPHA_ONLY
+uniform sampler2D u_LightTex;
+#endif
 layout(location = 7) in vec3 spl_UnlitVertexColor;
 // RenderPearl BindGroupLayout: SofronLights (std140, 3088 bytes).
 struct SPLLight { vec4 positionRadius; vec4 rgbPower; };
@@ -87,8 +90,7 @@ vec4 spl_evalChunkLights(vec3 cameraRelativePos) {
 vec4 spl_voxelFetch(int offset, int side, ivec3 q) {
     if(any(lessThan(q,ivec3(0))) || any(greaterThanEqual(q,ivec3(side))))
         return vec4(0.0);
-    int packed=spl_atlas(offset+4+(q.y*side+q.z)*side+q.x);
-    uint v=uint(packed);
+    uint v=uint(spl_atlas(offset+4+(q.y*side+q.z)*side+q.x));
     return vec4(vec3(float((v>>16u)&255u),float((v>>8u)&255u),float(v&255u))/255.0,
                 float((v>>24u)&255u)/15.0);
 }
@@ -133,6 +135,7 @@ vec4 spl_evalDynamicSurface(vec3 cameraRelativePos) {
     airPoint[axis] = plane + signSide * 0.51;
     vec3 centered = airPoint - vec3(origin) - vec3(0.5);
     ivec3 q = ivec3(floor(centered));
+    q[axis] = int(floor(centered[axis] + 0.5));
     vec3 t = smoothstep(vec3(0.0),vec3(1.0),fract(centered));
     int a=(axis+1)%3,b=(axis+2)%3;
     ivec3 da=ivec3(0); da[a]=1;
@@ -239,6 +242,7 @@ void main() {
     float splRawAlpha = texelFetch(u_BlockTex, splPixel, 0).a;
     float splEmissivePixel = 1.0 - step(0.45, abs(splRawAlpha * 255.0 - 254.0));
     vec3 splUnlitTexel = texelFetch(u_BlockTex, splPixel, 0).rgb;
+    vec3 surfaceAlbedo = color.rgb * spl_UnlitVertexColor;
     color *= v_Color; // Apply per-vertex color modulator
 
 #ifdef ALPHA_CUTOUT
@@ -270,12 +274,11 @@ void main() {
         float blend = (1.0 - exp(-stationaryEnergy * 1.15))
                     * daylightMask * (1.0 - splFullbrightPreserve);
         vec3 base = color.rgb;
-        float brightness = max(max(base.r, base.g), base.b);
         // Highly saturated reds have low perceived luminance relative to green.
         // Give red-dominant hues a modest channel boost without changing vanilla light.
         float redDominance = clamp(sourceHue.r - max(sourceHue.g, sourceHue.b), 0.0, 1.0);
         float perceptualCompensation = 1.0 + 0.65 * redDominance;
-        vec3 chromatic = min(vec3(1.0), sourceHue * brightness * perceptualCompensation);
+        vec3 chromatic = min(vec3(1.0), base * sourceHue * perceptualCompensation);
         color.rgb = mix(base, chromatic, clamp(blend, 0.0, 0.92));
     }
     // 0.9.36 diagnostic output uses the *same* chunk-atlas sample as normal shading.
@@ -299,25 +302,12 @@ void main() {
     // independently shaded surface: doing so exposed triangle seams.
     vec4 vox = spl_evalDynamicSurface(spl_SurfaceCameraPos);
     float movingMask=(1.0-smoothstep(0.22,0.70,spl_Sunlit))*(1.0-splFullbrightPreserve);
-    float existingBlock=clamp((spl_BlockLightCoord-0.03125)/0.9375,0.0,1.0);
-    float targetLevel=clamp(max(existingBlock,vox.a),0.0,1.0);
-    float missing=max(targetLevel-existingBlock,0.0)*movingMask;
-    // The original lit color is still the base. Increase light *multiplicatively*
-    // in proportion to the missing 0-15 block-light level, preserving texture
-    // and Sodium's baked AO instead of drawing a flat grayscale projector.
-    float vanillaCurveOld=0.10+0.90*pow(existingBlock,1.4);
-    float vanillaCurveNew=0.10+0.90*pow(targetLevel,1.4);
-    float ratio=clamp(vanillaCurveNew/max(vanillaCurveOld,0.10),1.0,3.0);
-    float fade=clamp(missing*2.0,0.0,1.0);
-    color.rgb=min(vec3(1.0),color.rgb*mix(1.0,ratio,fade));
-    // The configured RGB tint stays separate from vanilla-like brightness.
-    float chroma=max(max(vox.r,vox.g),vox.b);
-    if(chroma>0.0001){
-        float blend=clamp(chroma*0.50*movingMask,0.0,0.45);
-        vec3 hue=vox.rgb/chroma;
-        float value=max(max(color.r,color.g),color.b);
-        color.rgb=mix(color.rgb,hue*value,blend);
-    }
+    float targetCoord = max(spl_LightCoord.x, (vox.a * 15.0 + 0.5) / 16.0);
+    vec3 oldLight = texture(u_LightTex, spl_LightCoord).rgb;
+    vec3 newLight = texture(u_LightTex, vec2(targetCoord, spl_LightCoord.y)).rgb;
+    float chroma = max(max(vox.r, vox.g), vox.b);
+    vec3 hue = mix(vec3(1.0), vox.rgb / max(chroma, 0.0001), clamp(chroma, 0.0, 1.0));
+    color.rgb += surfaceAlbedo * max(newLight - oldLight, vec3(0.0)) * hue * movingMask;
     // Emissive is self-lit: preserve its unlightmapped base texture color
     // after BOTH stationary tint and moving light. Never brighten neighbors.
     color.rgb = mix(color.rgb, splUnlitTexel * spl_UnlitVertexColor, splEmissivePixel);

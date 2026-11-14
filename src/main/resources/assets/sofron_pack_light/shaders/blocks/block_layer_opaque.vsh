@@ -16,7 +16,7 @@ layout(location = 3) out float fadeFactor;
 layout(location = 4) out vec3 spl_SurfaceCameraPos;
 layout(location = 5) out float spl_Sunlit;
 // Raw block-lightmap coordinate: maximum block-light level denotes fullbright.
-layout(location = 6) out float spl_BlockLightCoord;
+layout(location = 6) out vec2 spl_LightCoord;
 layout(location = 7) out vec3 spl_UnlitVertexColor;
 uniform isamplerBuffer u_SectionTimeInfo;
 
@@ -72,12 +72,12 @@ void main() {
     spl_UnlitVertexColor = _vert_color.rgb;
     v_Color = _vert_color * texture(u_LightTex, _vert_tex_light_coord);
     spl_Sunlit = texture(u_LightTex, vec2(0.03125, _vert_tex_light_coord.y)).r;
-    spl_BlockLightCoord = _vert_tex_light_coord.x;
+    spl_LightCoord = _vert_tex_light_coord;
 #else
     spl_UnlitVertexColor = _vert_color.rgb;
     v_Color = _vert_color;
     spl_Sunlit = 0.0;
-    spl_BlockLightCoord = 0.0;
+    spl_LightCoord = vec2(0.0);
 #endif
 
     v_TexCoord = (_vert_tex_diffuse_coord_bias * u_TexCoordShrink) + _vert_tex_diffuse_coord; // FMA for precision

@@ -21,6 +21,42 @@ public final class BlockLightRules {
         if (rule != null && rule.rgbRadius() != null) return rule.rgbRadius();
         return (float)(defaultRadius * actualEmission / 15.0 * 0.68);
     }
+    private static final String LEGACY_DEFAULTS = "# Sofron Pack Light 0.9.42 default block rules\\n" +
+                "# Format: namespace:block = #RRGGBB, intensityPercent[, vanillaEmission0to15[, rgbRadiusBlocks]]\\n" +
+                "# Wall torch variants automatically inherit the respective floor torch rule.\\n" +
+                "minecraft:torch = #FFA500, 50, 14, 3\\n" +
+                "minecraft:soul_torch = #00FAFF, 50, 10, 3\\n" +
+                "minecraft:redstone_torch = #FF0000, 50, 10, 3\\n" +
+                "minecraft:copper_torch = #00FF2E, 50, 14, 3\\n";
+    private static final String DEFAULTS = """
+        # namespace:block = #RRGGBB, intensityPercent[, emissionOverride[, tintRadius]]
+        minecraft:torch = #FFAB53, 100
+        minecraft:lantern = #FFAC55, 100
+        minecraft:campfire = #FF8538, 100
+        minecraft:fire = #FF702C, 100
+        minecraft:soul_torch = #50E7FF, 100
+        minecraft:soul_lantern = #50E7FF, 100
+        minecraft:soul_campfire = #43D8FF, 100
+        minecraft:soul_fire = #43D8FF, 100
+        minecraft:redstone_torch = #FF2929, 100
+        minecraft:redstone_lamp = #FFBB73, 100
+        minecraft:copper_torch = #56FF98, 100
+        minecraft:copper_lantern = #56FF98, 100
+        minecraft:glowstone = #FFD676, 100
+        minecraft:sea_lantern = #9BEFE7, 100
+        minecraft:shroomlight = #FF9654, 100
+        minecraft:ochre_froglight = #FFE493, 100
+        minecraft:verdant_froglight = #ADFFC2, 100
+        minecraft:pearlescent_froglight = #FFB9EA, 100
+        minecraft:jack_o_lantern = #FFA544, 100
+        minecraft:end_rod = #F3CFFF, 100
+        minecraft:lava = #FF702B, 100
+        minecraft:magma_block = #FF6934, 100
+        minecraft:crying_obsidian = #A64DFF, 100
+        minecraft:amethyst_cluster = #CAA1FF, 100
+        minecraft:glow_lichen = #B1D8B8, 100
+        minecraft:beacon = #B8FFF2, 100
+        """;
     private static final Pattern HEX = Pattern.compile("#[0-9a-fA-F]{6}");
     private static final RgbLight NEUTRAL = new RgbLight(1,1,1);
     private static volatile Map<String, Rule> rules = Map.of();
@@ -72,15 +108,9 @@ public final class BlockLightRules {
         if (path == null) return;
         try {
             Files.createDirectories(path.getParent());
-            if (!Files.exists(path)) Files.writeString(path,
-                "# Sofron Pack Light 0.9.42 default block rules\\n" +
-                "# Format: namespace:block = #RRGGBB, intensityPercent[, vanillaEmission0to15[, rgbRadiusBlocks]]\\n" +
-                "# Wall torch variants automatically inherit the respective floor torch rule.\\n" +
-                "minecraft:torch = #FFA500, 50, 14, 3\\n" +
-                "minecraft:soul_torch = #00FAFF, 50, 10, 3\\n" +
-                "minecraft:redstone_torch = #FF0000, 50, 10, 3\\n" +
-                "minecraft:copper_torch = #00FF2E, 50, 14, 3\\n",
-                StandardCharsets.UTF_8);
+            if (!Files.exists(path) || (force && Files.readString(path).equals(LEGACY_DEFAULTS))) {
+                Files.writeString(path, DEFAULTS, StandardCharsets.UTF_8);
+            }
             long modified = Files.getLastModifiedTime(path).toMillis();
             if (!force && modified == stamp) return;
             Map<String,Rule> parsed = new HashMap<>();
