@@ -17,11 +17,15 @@ layout(location = 6) in vec2 spl_LightCoord;
 uniform sampler2D u_LightTex;
 #endif
 layout(location = 7) in vec3 spl_UnlitVertexColor;
+layout(location = 8) flat in int spl_OreLight;
 // RenderPearl BindGroupLayout: SofronLights (std140, 3088 bytes).
 struct SPLLight { vec4 positionRadius; vec4 rgbPower; };
 layout(std140) uniform SofronLights {
     ivec4 splLightHeader;
     SPLLight splLights[256];
+    vec4 splCameraFractionAndDarken;
+    vec4 splPlayerRelative;
+    ivec4 splLookTarget;
 };
 // The header separates moving emitters from placed blocks. Existing block light
 // supplies its own brightness; moving lights have no vanilla lightmap entry.
@@ -147,6 +151,20 @@ vec4 spl_evalDynamicSurface(vec3 cameraRelativePos) {
     vec4 interp=mix(mix(v00,v10,t[a]),mix(v01,v11,t[a]),t[b]);
     return clamp(interp,0.0,1.0);
 }
+uniform isamplerBuffer SofronOreRects;
+vec4 oreRect(int at) {
+    return intBitsToFloat(ivec4(texelFetch(SofronOreRects, at).r,
+        texelFetch(SofronOreRects, at+1).r, texelFetch(SofronOreRects, at+2).r,
+        texelFetch(SofronOreRects, at+3).r));
+}
+bool oreVisible(vec3 inward) {
+    // Work relative to the integer camera block to preserve precision far from spawn.
+    ivec3 block = ivec3(floor(spl_SurfaceCameraPos + splCameraFractionAndDarken.xyz + inward));
+    vec3 delta = vec3(block) + 0.5 - splPlayerRelative.xyz;
+    return dot(delta, delta) <= 256.0 || spl_OreLight == 17 ||
+        float(spl_OreLight - 1) - splCameraFractionAndDarken.w > 5.0 ||
+        (splLookTarget.w != 0 && all(equal(block, splLookTarget.xyz)));
+}
 uniform sampler2D u_BlockTex; // The block texture
 
 #ifndef OIT_ALPHA_ONLY
@@ -241,6 +259,7 @@ void main() {
     ivec2 splPixel = clamp(ivec2(floor(v_TexCoord * vec2(splTextureSize))), ivec2(0), splTextureSize - ivec2(1));
     float splRawAlpha = texelFetch(u_BlockTex, splPixel, 0).a;
     float splEmissivePixel = 1.0 - step(0.45, abs(splRawAlpha * 255.0 - 254.0));
+    if (spl_OreLight != 0) splEmissivePixel = 0.0;
     vec3 splUnlitTexel = texelFetch(u_BlockTex, splPixel, 0).rgb;
     vec3 surfaceAlbedo = color.rgb * spl_UnlitVertexColor;
     color *= v_Color; // Apply per-vertex color modulator
@@ -311,6 +330,24 @@ void main() {
     // Emissive is self-lit: preserve its unlightmapped base texture color
     // after BOTH stationary tint and moving light. Never brighten neighbors.
     color.rgb = mix(color.rgb, splUnlitTexel * spl_UnlitVertexColor, splEmissivePixel);
+    if (spl_OreLight != 0) {
+        vec3 n = cross(dFdx(spl_SurfaceCameraPos), dFdy(spl_SurfaceCameraPos));
+        n *= inversesqrt(max(dot(n,n), 1e-20));
+        if (dot(n, spl_SurfaceCameraPos) > 0.0) n = -n;
+        if (oreVisible(-n * 0.00025)) {
+            int pairs = texelFetch(SofronOreRects, 0).r;
+            for (int i = 0; i < pairs; ++i) {
+                vec4 base = oreRect(1 + 8*i);
+                if (any(lessThan(v_TexCoord, base.xy)) || any(greaterThanEqual(v_TexCoord, base.zw))) continue;
+                vec4 mask = oreRect(5 + 8*i);
+                vec2 localUV = (v_TexCoord - base.xy) / (base.zw - base.xy);
+                ivec2 maskPixel = ivec2(mix(mask.xy, mask.zw, localUV) * vec2(splTextureSize));
+                vec4 overlay = texelFetch(u_BlockTex, maskPixel, 0);
+                color.rgb = mix(color.rgb, overlay.rgb * spl_UnlitVertexColor, overlay.a);
+                break;
+            }
+        }
+    }
     fragColor = calculateFinalColor(color);
     #endif
 }

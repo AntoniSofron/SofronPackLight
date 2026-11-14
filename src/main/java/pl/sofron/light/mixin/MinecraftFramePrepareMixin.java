@@ -8,14 +8,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import pl.sofron.light.render.gpu.SodiumRenderPassCoordinator;
 
 /** At frame entry no RenderPearl render pass has been opened yet. */
-@Mixin(Minecraft.class)
+@Mixin(net.minecraft.client.renderer.GameRenderer.class)
 public abstract class MinecraftFramePrepareMixin {
-    @Inject(method = "renderFrame", at = @At("HEAD"))
-    private void sofron$prepareLightsBeforeFrame(boolean tick, CallbackInfo ci) {
+    @Inject(method = "renderLevel", at = @At("HEAD"))
+    private void sofron$prepareLightsBeforeFrame(CallbackInfo ci) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null || mc.player == null) return;
-        // Use the same camera reference as Sodium; gameRenderer's camera is the previous
-        // completed camera state at frame HEAD (one-frame latency during fast motion).
         var camera = mc.gameRenderer.mainCamera();
         var pos = camera.position();
         SodiumRenderPassCoordinator.prepareFrame(pos.x, pos.y, pos.z);

@@ -7,11 +7,14 @@ import pl.sofron.light.SofronPackLightClient;
 import pl.sofron.light.render.GpuLightBuffer;
 import pl.sofron.light.runtime.ChunkLightAtlas;
 import net.minecraft.client.Minecraft;
+import pl.sofron.light.emissive.OreMasks;
 
 /** Per-frame data upload followed by RenderPass binding. Render-thread only. */
 public final class SodiumRenderPassCoordinator {
     private static RenderPearlNativeLightBuffer nativeBuffer;
     private static RenderPearlChunkAtlasBuffer chunkAtlasBuffer;
+    private static RenderPearlChunkAtlasBuffer oreBuffer;
+    private static OreMasks uploadedMasks;
     private static ChunkLightAtlas.Snapshot lastAtlas;
     private static long lastRevision = Long.MIN_VALUE;
     private static int lastOriginX = Integer.MIN_VALUE, lastOriginZ = Integer.MIN_VALUE, lastWidth;
@@ -27,11 +30,17 @@ public final class SodiumRenderPassCoordinator {
     public static long diagnosticDrawSubmissions() { return submissions; }
     private SodiumRenderPassCoordinator() {}
 
-    /** Upload only before the frame graph opens its render passes. Called from Minecraft.renderFrame HEAD. */
+    /** Upload only before the frame graph opens its render passes. Called from GameRenderer.renderLevel HEAD. */
     public static void prepareFrame(double x, double y, double z) {
         if (SofronPackLightClient.CONFIG == null) return;
         if (nativeBuffer == null) nativeBuffer = new RenderPearlNativeLightBuffer(RenderSystem.getDevice());
-        if (chunkAtlasBuffer == null) chunkAtlasBuffer = new RenderPearlChunkAtlasBuffer(RenderSystem.getDevice());
+        if (chunkAtlasBuffer == null) chunkAtlasBuffer = new RenderPearlChunkAtlasBuffer(RenderSystem.getDevice(), "SofronLightAtlas");
+        if (oreBuffer == null) oreBuffer = new RenderPearlChunkAtlasBuffer(RenderSystem.getDevice(), "SofronOreRects");
+        var masks = OreMasks.current();
+        if (uploadedMasks != masks) {
+            oreBuffer.upload(masks.rectangles().duplicate());
+            uploadedMasks = masks;
+        }
         // Keep the original dynamic-item illumination, but no longer put placed lights
         // in the global 256-entry uniform array.
         int moving = SofronPackLightClient.LIGHTS.movingCount();
@@ -79,8 +88,9 @@ public final class SodiumRenderPassCoordinator {
         if (pass == null || camera == null || nativeBuffer == null || !nativeBuffer.isReady()) return;
         nativeBuffer.bind(pass);
         if (chunkAtlasBuffer != null) chunkAtlasBuffer.bind(pass);
+        oreBuffer.bind(pass);
         submissions++;
     }
-    public static void close() { if (nativeBuffer != null) nativeBuffer.close(); nativeBuffer = null; if(chunkAtlasBuffer!=null) chunkAtlasBuffer.close(); chunkAtlasBuffer=null; }
+    public static void close() { if (nativeBuffer != null) nativeBuffer.close(); nativeBuffer = null; if(chunkAtlasBuffer!=null) chunkAtlasBuffer.close(); chunkAtlasBuffer=null; if(oreBuffer!=null) oreBuffer.close(); oreBuffer=null; uploadedMasks=null; }
     public static long submissions() { return submissions; }
 }

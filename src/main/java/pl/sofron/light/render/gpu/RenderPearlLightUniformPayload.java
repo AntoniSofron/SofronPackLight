@@ -12,7 +12,7 @@ public final class RenderPearlLightUniformPayload {
     public static final int HEADER_BYTES = 16;
     public static final int LIGHT_STRIDE_BYTES = 32;
     public static final int CAPACITY = GpuLightBuffer.MAX_GPU_LIGHTS;
-    public static final int BYTE_SIZE = HEADER_BYTES + LIGHT_STRIDE_BYTES * CAPACITY;
+    public static final int BYTE_SIZE = HEADER_BYTES + LIGHT_STRIDE_BYTES * CAPACITY + 48;
     private final ByteBuffer data = ByteBuffer.allocateDirect(BYTE_SIZE).order(ByteOrder.nativeOrder());
     private int count;
 
@@ -30,7 +30,8 @@ public final class RenderPearlLightUniformPayload {
         FloatBuffer source = lights.readOnlyData();
         for (int i = 0; i < n * GpuLightBuffer.FLOATS_PER_LIGHT; i++) data.putFloat(source.get());
         // Clear trailing slots to prevent stale lights when shrinking the list.
-        while (data.position() < BYTE_SIZE) data.putLong(0L);
+        while (data.position() < BYTE_SIZE - 48) data.putLong(0L);
+        pl.sofron.light.emissive.OreView.write(data, net.minecraft.client.Minecraft.getInstance());
         data.flip();
         count = n;
     }

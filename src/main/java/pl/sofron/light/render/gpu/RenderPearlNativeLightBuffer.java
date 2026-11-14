@@ -9,7 +9,7 @@ import java.util.Objects;
 
 /** Native RenderPearl uniform storage. All methods must run on the render thread.
  * Register the matching 'SofronLights' binding in the compiled pipeline BEFORE bind().
- * The 8208-byte payload uses a std140 header + 256 pairs of vec4.
+ * The std140 block contains light sources and the ore visibility frame data.
  */
 public final class RenderPearlNativeLightBuffer implements AutoCloseable {
     public static final String UNIFORM = "SofronLights";

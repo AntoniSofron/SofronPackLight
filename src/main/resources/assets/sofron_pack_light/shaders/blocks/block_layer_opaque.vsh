@@ -18,6 +18,7 @@ layout(location = 5) out float spl_Sunlit;
 // Raw block-lightmap coordinate: maximum block-light level denotes fullbright.
 layout(location = 6) out vec2 spl_LightCoord;
 layout(location = 7) out vec3 spl_UnlitVertexColor;
+layout(location = 8) flat out int spl_OreLight;
 uniform isamplerBuffer u_SectionTimeInfo;
 
 #ifdef VULKAN
@@ -47,6 +48,7 @@ vec3 _get_draw_translation(uint pos) {
 
 void main() {
     _vert_init();
+    spl_OreLight = int(_material_params >> 3u);
 
     // Transform the chunk-local vertex position into world model space
     vec3 translation = u_RegionOffset + _get_draw_translation(_draw_id);
