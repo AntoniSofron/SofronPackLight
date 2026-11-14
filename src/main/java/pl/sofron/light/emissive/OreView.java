@@ -22,10 +22,8 @@ public final class OreView {
            .putFloat((float)(player.z - origin.getZ())).putFloat(0);
         BlockPos target = null;
         if (!OreMasks.current().pairs().isEmpty()) {
-            // Cover the diagonal and the full height of the rendered volume, including vertical views.
-            double width = (client.options.getEffectiveRenderDistance() + 2) * 16.0;
-            double height = Math.max(Math.abs(eye.y - client.level.getMinY()), Math.abs(eye.y - client.level.getMaxY())) + 2;
-            double reach = Math.hypot(Math.sqrt(2.0) * width, height);
+            // Include detached/third-person camera offset; the shader enforces the player radius.
+            double reach = 33.0 + eye.distanceTo(player);
             Vec3 end = eye.add(new Vec3(camera.forwardVector()).scale(reach));
             BlockHitResult hit = client.level.clip(new ClipContext(eye, end, ClipContext.Block.OUTLINE,
                 ClipContext.Fluid.NONE, camera.entity()));

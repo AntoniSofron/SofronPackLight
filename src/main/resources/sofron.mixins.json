@@ -11,7 +11,8 @@
     "SodiumRenderPearlLayoutMixin",
     "OreAtlasMixin",
     "OreMeshMixin",
-    "SingleOreSpriteMixin"
+    "SingleOreSpriteMixin",
+    "LightIndexMixin"
   ],
   "injectors": {
     "defaultRequire": 1

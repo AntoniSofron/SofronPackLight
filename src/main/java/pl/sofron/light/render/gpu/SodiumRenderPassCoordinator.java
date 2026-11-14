@@ -15,10 +15,12 @@ public final class SodiumRenderPassCoordinator {
     private static RenderPearlChunkAtlasBuffer chunkAtlasBuffer;
     private static RenderPearlChunkAtlasBuffer oreBuffer;
     private static OreMasks uploadedMasks;
-    private static ChunkLightAtlas.Snapshot lastAtlas;
+    private static RenderPearlChunkAtlasBuffer voxelBuffer;
+    private static pl.sofron.light.runtime.DynamicVoxelField.Snapshot lastVoxels;
+    private static final java.nio.ByteBuffer voxelBytes = java.nio.ByteBuffer.allocateDirect(
+        16 + 4 * pl.sofron.light.runtime.DynamicVoxelField.CELLS).order(java.nio.ByteOrder.nativeOrder());
     private static long lastRevision = Long.MIN_VALUE;
-    private static int lastOriginX = Integer.MIN_VALUE, lastOriginZ = Integer.MIN_VALUE, lastWidth;
-    private static final GpuLightBuffer frame = new GpuLightBuffer();
+    private static int lastOriginX, lastOriginZ, lastWidth;
     private static final RenderPearlLightUniformPayload payload = new RenderPearlLightUniformPayload();
     private static long submissions;
     private static volatile int diagnosticAtlasReferences;
@@ -41,30 +43,32 @@ public final class SodiumRenderPassCoordinator {
             oreBuffer.upload(masks.rectangles().duplicate());
             uploadedMasks = masks;
         }
-        // Keep the original dynamic-item illumination, but no longer put placed lights
-        // in the global 256-entry uniform array.
-        int moving = SofronPackLightClient.LIGHTS.movingCount();
-        var current = SofronPackLightClient.LIGHTS.sources();
-        frame.update(current.subList(0, Math.min(moving, current.size())), x, y, z, GpuLightBuffer.MAX_GPU_LIGHTS);
         int debugMode = switch (SofronPackLightClient.CONFIG.rgbDebugMode) {
             case "raw" -> 1;
             case "strength" -> 2;
             case "mask" -> 3;
             default -> 0;
         };
-        payload.update(frame, frame.count(), debugMode);
+        Minecraft mc = Minecraft.getInstance();
+        int distance = Math.max(1, mc.options.getEffectiveRenderDistance());
+        int width = 2*distance+1;
+        int originX = (mc.player.blockPosition().getX() >> 4)-distance;
+        int originZ = (mc.player.blockPosition().getZ() >> 4)-distance;
+        payload.update(debugMode, originX, originZ, x, y, z);
         nativeBuffer.upload(payload);
-        Minecraft mc=Minecraft.getInstance();
-        if (mc.player != null && mc.level != null) {
-            var index=SofronPackLightClient.LIGHTS.chunkIndex();
-            int distance=Math.max(1, mc.options.renderDistance().get());
-            int width=2*distance+1;
-            int originX=(mc.player.blockPosition().getX() >> 4)-distance;
-            int originZ=(mc.player.blockPosition().getZ() >> 4)-distance;
-            // Camera position is encoded inside the atlas, therefore it is rebuilt
-            // each frame. A future optimisation should separate static and camera data.
+        var field = SofronPackLightClient.VOXELS.field();
+        if (voxelBuffer == null || field != lastVoxels) {
+            if (voxelBuffer == null) voxelBuffer = new RenderPearlChunkAtlasBuffer(RenderSystem.getDevice(), "SofronVoxels");
+            voxelBytes.clear();
+            if (field == null) voxelBytes.putLong(0).putLong(0);
+            else pl.sofron.light.runtime.DynamicVoxelField.put(voxelBytes, field);
+            voxelBuffer.upload(voxelBytes.flip());
+            lastVoxels = field;
+        }
+        var index = SofronPackLightClient.LIGHTS.chunkIndex();
+        if (index.revision() != lastRevision || width != lastWidth || originX != lastOriginX || originZ != lastOriginZ) {
             try {
-                ChunkLightAtlas.Snapshot atlas=ChunkLightAtlas.build(index,originX,originZ,width,x,y,z, SofronPackLightClient.VOXELS.field());
+                ChunkLightAtlas.Snapshot atlas=ChunkLightAtlas.build(index,originX,originZ,width,0,0,0);
                 chunkAtlasBuffer.upload(atlas);
                 diagnosticAtlasReferences = atlas.lightReferences();
                 diagnosticAtlasCells = atlas.chunkCount();
@@ -76,10 +80,10 @@ public final class SodiumRenderPassCoordinator {
                 // frame's stationary RGB rather than reuse a stale atlas.
                 chunkAtlasBuffer.upload(ChunkLightAtlas.empty(x,y,z));
             }
-        } else {
-            chunkAtlasBuffer.upload(ChunkLightAtlas.empty(x,y,z));
-            diagnosticAtlasReferences = 0;
-            diagnosticAtlasCells = 1;
+            lastRevision = index.revision();
+            lastWidth = width;
+            lastOriginX = originX;
+            lastOriginZ = originZ;
         }
     }
 
@@ -89,8 +93,9 @@ public final class SodiumRenderPassCoordinator {
         nativeBuffer.bind(pass);
         if (chunkAtlasBuffer != null) chunkAtlasBuffer.bind(pass);
         oreBuffer.bind(pass);
+        voxelBuffer.bind(pass);
         submissions++;
     }
-    public static void close() { if (nativeBuffer != null) nativeBuffer.close(); nativeBuffer = null; if(chunkAtlasBuffer!=null) chunkAtlasBuffer.close(); chunkAtlasBuffer=null; if(oreBuffer!=null) oreBuffer.close(); oreBuffer=null; uploadedMasks=null; }
+    public static void close() { if (nativeBuffer != null) nativeBuffer.close(); nativeBuffer = null; if(chunkAtlasBuffer!=null) chunkAtlasBuffer.close(); chunkAtlasBuffer=null; if(oreBuffer!=null) oreBuffer.close(); oreBuffer=null; uploadedMasks=null; if(voxelBuffer!=null) voxelBuffer.close(); voxelBuffer=null; lastVoxels=null; lastRevision=Long.MIN_VALUE; }
     public static long submissions() { return submissions; }
 }

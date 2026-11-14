@@ -35,13 +35,46 @@ public record OreMasks(Map<TextureAtlasSprite, TextureAtlasSprite> pairs, ByteBu
             var base = atlas.regions().get(baseId);
             if (base != null) pairs.put(base, mask);
         });
-        ByteBuffer data = allocate(4 + 32 * pairs.size());
-        data.putInt(pairs.size());
-        pairs.forEach((base, mask) -> {
-            putRect(data, base);
-            putRect(data, mask);
-        });
-        current = new OreMasks(Map.copyOf(pairs), data.flip().asReadOnlyBuffer());
+        current = new OreMasks(Map.copyOf(pairs), tileIndex(atlas, pairs));
+    }
+
+    // Sparse lists per texture tile. A fragment examines only sprites sharing that tile.
+    private static ByteBuffer tileIndex(SpriteLoader.Preparations atlas, Map<TextureAtlasSprite, TextureAtlasSprite> pairs) {
+        if (pairs.isEmpty()) return allocate(4).putInt(0, 0);
+        int tile = Math.max(16, Math.max(atlas.width(), atlas.height()) / 256);
+        int columns = Math.ceilDiv(atlas.width(), tile);
+        var cells = new java.util.ArrayList<java.util.ArrayList<Integer>>(
+            java.util.Collections.nCopies(columns * Math.ceilDiv(atlas.height(), tile), null));
+        int descriptor = 0;
+        for (var base : pairs.keySet()) {
+            int x0 = Math.round(base.getU0() * atlas.width()) / tile;
+            int y0 = Math.round(base.getV0() * atlas.height()) / tile;
+            int x1 = (Math.round(base.getU1() * atlas.width()) - 1) / tile;
+            int y1 = (Math.round(base.getV1() * atlas.height()) - 1) / tile;
+            for (int y=y0; y<=y1; y++) for (int x=x0; x<=x1; x++) {
+                int index = y*columns+x;
+                var list = cells.get(index);
+                if (list == null) { list = new java.util.ArrayList<>(); cells.set(index, list); }
+                list.add(descriptor);
+            }
+            descriptor++;
+        }
+        int entries = cells.stream().filter(java.util.Objects::nonNull).mapToInt(java.util.List::size).sum();
+        int indices = 3 + cells.size()*2;
+        int records = indices + entries;
+        ByteBuffer data = allocate(4*(records + pairs.size()*8));
+        data.putInt(tile).putInt(columns).putInt(records);
+        for (var list : cells) {
+            int count = list == null ? 0 : list.size();
+            data.putInt(indices).putInt(count);
+            indices += count;
+        }
+        for (var list : cells) if (list != null) for (int id : list) data.putInt(id);
+        for (var entry : pairs.entrySet()) {
+            putRect(data, entry.getKey());
+            putRect(data, entry.getValue());
+        }
+        return data.flip().asReadOnlyBuffer();
     }
 
     private static ByteBuffer allocate(int size) {

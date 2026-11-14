@@ -18,75 +18,16 @@ uniform sampler2D u_LightTex;
 #endif
 layout(location = 7) in vec3 spl_UnlitVertexColor;
 layout(location = 8) flat in int spl_OreLight;
-// RenderPearl BindGroupLayout: SofronLights (std140, 3088 bytes).
-struct SPLLight { vec4 positionRadius; vec4 rgbPower; };
 layout(std140) uniform SofronLights {
     ivec4 splLightHeader;
-    SPLLight splLights[256];
     vec4 splCameraFractionAndDarken;
     vec4 splPlayerRelative;
     ivec4 splLookTarget;
+    vec4 splAtlasCamera;
 };
-// The header separates moving emitters from placed blocks. Existing block light
-// supplies its own brightness; moving lights have no vanilla lightmap entry.
-vec4 spl_eval(vec3 p, int beginLight, int endLight) {
-    vec3 weightedHue = vec3(0.0);
-    float hueWeight = 0.0;
-    float strength = 0.0;
-    for (int i = beginLight; i < min(endLight, 256); ++i) {
-        vec4 position = splLights[i].positionRadius;
-        vec4 emission = splLights[i].rgbPower;
-        float x = clamp(1.0 - distance(p, position.xyz) / max(position.w, 0.001), 0.0, 1.0);
-        float influence = max(emission.a, 0.0) * pow(x, 2.8);
-        vec3 rgb = max(emission.rgb, vec3(0.0));
-        float peak = max(max(rgb.r, rgb.g), rgb.b);
-        if (peak <= 0.00001 || influence <= 0.00001) continue;
-        float priority = influence * influence * peak;
-        weightedHue += (rgb / peak) * priority;
-        hueWeight += priority;
-        strength += influence * peak;
-    }
-    return hueWeight > 0.00001 ?
-        vec4(clamp(weightedHue / hueWeight, 0.0, 1.0), strength) : vec4(0.0);
-}
-uniform isamplerBuffer SofronLightAtlas;
-int spl_atlas(int i) { return texelFetch(SofronLightAtlas, i).r; }
-float spl_float(int i) { return intBitsToFloat(spl_atlas(i)); }
-// Keep chromaticity and strength separate. Per-channel clamping of the sum
-// turned strongly overlapping RED + nearby cyan/green lights into white.
-vec4 spl_evalChunkLights(vec3 cameraRelativePos) {
-    if (spl_atlas(0) != 1) return vec4(0.0);
-    int ox=spl_atlas(1), oz=spl_atlas(2), width=spl_atlas(3);
-    if (width < 1 || width > 129) return vec4(0.0);
-    vec3 p=cameraRelativePos+vec3(spl_float(4),spl_float(5),spl_float(6));
-    ivec2 cell=ivec2(floor(p.xz / 16.0));
-    if (any(lessThan(cell,ivec2(0))) || any(greaterThanEqual(cell,ivec2(width)))) return vec4(0.0);
-    int entry=8+2*(cell.y*width+cell.x);
-    int begin=spl_atlas(entry), count=spl_atlas(entry+1);
-    if (count <= 0) return vec4(0.0);
-    vec3 weightedHue=vec3(0.0);
-    float hueWeight=0.0;
-    float totalStrength=0.0;
-    for(int i=0;i<count;i++) {
-        int base=begin+i*8;
-        vec3 lpos=vec3(spl_float(base),spl_float(base+1),spl_float(base+2));
-        // Reduce ONLY the visual RGB tint radius; vanilla emission stays untouched.
-        float radius=max(spl_float(base+3),0.001);
-        float distanceFactor=clamp(1.0-distance(p,lpos)/radius,0.0,1.0);
-        float influence=spl_float(base+7)*pow(distanceFactor,2.8);
-        vec3 rgb=max(vec3(0.0),vec3(spl_float(base+4),spl_float(base+5),spl_float(base+6)));
-        float peak=max(max(rgb.r,rgb.g),rgb.b);
-        if (peak <= 0.00001 || influence <= 0.00001) continue;
-        totalStrength+=influence*peak;
-        // Favor nearby, dominant emitters, not the huge number of distant ones.
-        float priority=influence*influence*peak;
-        weightedHue+=(rgb/peak)*priority;
-        hueWeight+=priority;
-    }
-    if (hueWeight <= 0.00001) return vec4(0.0);
-    vec3 hue=weightedHue/hueWeight;
-    return vec4(clamp(hue,0.0,1.0),max(totalStrength,0.0));
-}
+layout(location = 9) in vec4 splStationaryVertex;
+uniform isamplerBuffer SofronVoxels;
+int voxelWord(int i) { return texelFetch(SofronVoxels, i).r; }
 // Packed dynamic voxel volume, appended to the stationary light atlas.
 // Layout: [originX,originY,originZ,size] + packed level/R/G/B per voxel.
 // Sampling is centered on the voxel centers (block center = floor(world)+0.5).
@@ -94,7 +35,7 @@ vec4 spl_evalChunkLights(vec3 cameraRelativePos) {
 vec4 spl_voxelFetch(int offset, int side, ivec3 q) {
     if(any(lessThan(q,ivec3(0))) || any(greaterThanEqual(q,ivec3(side))))
         return vec4(0.0);
-    uint v=uint(spl_atlas(offset+4+(q.y*side+q.z)*side+q.x));
+    uint v=uint(voxelWord(offset+4+(q.y*side+q.z)*side+q.x));
     return vec4(vec3(float((v>>16u)&255u),float((v>>8u)&255u),float(v&255u))/255.0,
                 float((v>>24u)&255u)/15.0);
 }
@@ -103,16 +44,14 @@ vec4 spl_voxelFetch(int offset, int side, ivec3 q) {
 // The voxel field is a *dynamic* light-level supplement; Minecraft's
 // original lightmap and vertex shading remain the base rendering.
 vec4 spl_evalDynamicSurface(vec3 cameraRelativePos) {
-    if (spl_atlas(0) != 1) return vec4(0.0);
-    int offset = spl_atlas(7);
-    if (offset <= 0) return vec4(0.0);
-    int side = spl_atlas(offset + 3);
+    int offset = 0;
+    int side = voxelWord(3);
     if (side != 33) return vec4(0.0);
-    vec3 world = cameraRelativePos + vec3(
-        spl_float(4) + float(spl_atlas(1) * 16),
-        spl_float(5),
-        spl_float(6) + float(spl_atlas(2) * 16));
-    ivec3 origin = ivec3(spl_atlas(offset), spl_atlas(offset+1), spl_atlas(offset+2));
+    ivec3 origin = ivec3(voxelWord(0), voxelWord(1), voxelWord(2));
+    // All math is local to the voxel volume.
+    vec3 world = cameraRelativePos + splCameraFractionAndDarken.xyz +
+        vec3(ivec3(splLightHeader.x, splLightHeader.y, splLightHeader.w) - origin);
+    origin = ivec3(0);
     // 0.9.54: determine the outward visible surface normal from the CURRENT
     // rasterized triangle, instead of comparing against the PREVIOUS frame's
     // camera position stored in the atlas. That old camera coordinate jumps
@@ -161,9 +100,10 @@ bool oreVisible(vec3 inward) {
     // Work relative to the integer camera block to preserve precision far from spawn.
     ivec3 block = ivec3(floor(spl_SurfaceCameraPos + splCameraFractionAndDarken.xyz + inward));
     vec3 delta = vec3(block) + 0.5 - splPlayerRelative.xyz;
-    return dot(delta, delta) <= 256.0 || spl_OreLight == 17 ||
-        float(spl_OreLight - 1) - splCameraFractionAndDarken.w > 5.0 ||
-        (splLookTarget.w != 0 && all(equal(block, splLookTarget.xyz)));
+    float rangeSq = dot(delta, delta);
+    bool lit = spl_OreLight == 17 || float(spl_OreLight - 1) - splCameraFractionAndDarken.w > 5.0;
+    return rangeSq <= 256.0 || (rangeSq <= 4096.0 && lit) ||
+        (rangeSq <= 1024.0 && splLookTarget.w != 0 && all(equal(block, splLookTarget.xyz)));
 }
 uniform sampler2D u_BlockTex; // The block texture
 
@@ -280,8 +220,8 @@ void main() {
     // Restore their unlit texel below after both stationary and moving lighting.
     float splFullbrightPreserve = splEmissivePixel;
     // Placed block lights: COLORIZE existing light, never add a second beam.
-    int movingCount = clamp(splLightHeader.y, 0, splLightHeader.x);
-    vec4 splStationarySample=spl_evalChunkLights(spl_SurfaceCameraPos);
+
+    vec4 splStationarySample=splStationaryVertex;
     vec3 splStationary=splStationarySample.rgb;
     float stationaryEnergy=splStationarySample.a;
     float daylightMask = 1.0 - smoothstep(0.38, 0.85, spl_Sunlit);
@@ -335,11 +275,17 @@ void main() {
         n *= inversesqrt(max(dot(n,n), 1e-20));
         if (dot(n, spl_SurfaceCameraPos) > 0.0) n = -n;
         if (oreVisible(-n * 0.00025)) {
-            int pairs = texelFetch(SofronOreRects, 0).r;
+            int tile = texelFetch(SofronOreRects, 0).r;
+            ivec2 cell = splPixel / max(1,tile);
+            int slot = 3 + 2*(cell.x + cell.y * texelFetch(SofronOreRects, 1).r);
+            int begin = texelFetch(SofronOreRects, slot).r;
+            int pairs = texelFetch(SofronOreRects, slot+1).r;
+            int records = texelFetch(SofronOreRects, 2).r;
             for (int i = 0; i < pairs; ++i) {
-                vec4 base = oreRect(1 + 8*i);
+                int rect = records + 8*texelFetch(SofronOreRects, begin+i).r;
+                vec4 base = oreRect(rect);
                 if (any(lessThan(v_TexCoord, base.xy)) || any(greaterThanEqual(v_TexCoord, base.zw))) continue;
-                vec4 mask = oreRect(5 + 8*i);
+                vec4 mask = oreRect(rect+4);
                 vec2 localUV = (v_TexCoord - base.xy) / (base.zw - base.xy);
                 ivec2 maskPixel = ivec2(mix(mask.xy, mask.zw, localUV) * vec2(splTextureSize));
                 vec4 overlay = texelFetch(u_BlockTex, maskPixel, 0);

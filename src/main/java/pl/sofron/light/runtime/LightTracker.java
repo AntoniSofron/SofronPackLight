@@ -75,10 +75,6 @@ public final class LightTracker {
         // must be supplied separately to our RGB renderer, like held items.
         if (cfg.stationaryBlockLighting) {
             chunkIndex.tick(client, cfg);
-            // Compatibility with the existing single-buffer GPU renderer: still only
-            // the nearest 256 sources can be uploaded. The full chunk index is retained
-            // for a future chunk-local render binding stage.
-            found.addAll(chunkIndex.allLights());
         } else {
             chunkIndex.clear();
         }
@@ -96,7 +92,7 @@ public final class LightTracker {
             .thenComparingDouble(LightSource::y)
             .thenComparingDouble(LightSource::z);
         found.subList(0, movingEnd).sort(priority);
-        found.subList(movingEnd, found.size()).sort(priority);
+
         int count = Math.min(found.size(), Math.min(cfg.maximumDynamicLights, 256));
         movingCount = Math.min(movingEnd, count);
         List<LightSource> selected = List.copyOf(found.subList(0, count));

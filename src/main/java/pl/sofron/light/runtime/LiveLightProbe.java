@@ -16,7 +16,9 @@ public final class LiveLightProbe {
     public RgbLight sample(Minecraft client, LightTracker tracker, LightConfig cfg,
                            double x, double y, double z) {
         if (client.level == null || !cfg.dynamicLighting) return RgbLight.BLACK;
-        return RgbLightField.sample(x, y, z, tracker.sources(),
+        var nearby = new java.util.ArrayList<>(tracker.sources());
+        nearby.addAll(tracker.chunkIndex().lightsAffectingChunk((int)Math.floor(x) >> 4, (int)Math.floor(z) >> 4));
+        return RgbLightField.sample(x, y, z, nearby,
             cfg.intensityPercent / 100.0f, new MinecraftOcclusion(client.level));
     }
 

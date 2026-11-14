@@ -62,6 +62,8 @@ public final class BlockLightRules {
     private static volatile Map<String, Rule> rules = Map.of();
     private static volatile Path path;
     private static volatile long stamp = Long.MIN_VALUE;
+    private static volatile boolean emissionOverrides;
+    public static boolean hasEmissionOverrides() { return emissionOverrides; }
     private static volatile long revision;
     public static long revision() { return revision; }
     public static int ruleCount() { return rules.size(); }
@@ -151,6 +153,7 @@ public final class BlockLightRules {
             Map<String, Rule> next=Collections.unmodifiableMap(parsed);
             if (!next.equals(rules)) revision++;
             rules=next;
+            emissionOverrides = next.values().stream().anyMatch(rule -> rule.emission() != null);
             stamp=modified;
             System.out.println("[Sofron Light] Loaded "+rules.size()+" block light color rules");
         } catch (IOException ex) { System.err.println("[Sofron Light] Cannot read light rules: "+ex.getMessage()); }

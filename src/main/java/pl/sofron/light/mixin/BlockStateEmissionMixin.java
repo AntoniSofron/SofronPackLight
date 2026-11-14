@@ -13,6 +13,7 @@ import pl.sofron.light.engine.BlockLightRules;
 public abstract class BlockStateEmissionMixin {
     @Inject(method = "getLightEmission", at = @At("HEAD"), cancellable = true)
     private void sofron$vanillaEmission(CallbackInfoReturnable<Integer> cir) {
+        if (!BlockLightRules.hasEmissionOverrides()) return;
         BlockBehaviour.BlockStateBase self = (BlockBehaviour.BlockStateBase) (Object) this;
         Integer value = BlockLightRules.vanillaEmissionOverride(
             BuiltInRegistries.BLOCK.getKey(self.getBlock()).toString());

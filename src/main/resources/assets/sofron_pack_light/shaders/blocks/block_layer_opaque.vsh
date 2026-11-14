@@ -46,6 +46,54 @@ vec3 _get_draw_translation(uint pos) {
     return _get_relative_chunk_coord(pos) * vec3(16.0);
 }
 
+layout(std140) uniform SofronLights {
+    ivec4 splLightHeader;
+    vec4 splCameraFractionAndDarken;
+    vec4 splPlayerRelative;
+    ivec4 splLookTarget;
+    vec4 splAtlasCamera;
+};
+layout(location = 9) out vec4 splStationaryVertex;
+uniform isamplerBuffer SofronLightAtlas;
+int spl_atlas(int i) { return texelFetch(SofronLightAtlas, i).r; }
+float spl_float(int i) { return intBitsToFloat(spl_atlas(i)); }
+// Keep chromaticity and strength separate. Per-channel clamping of the sum
+// turned strongly overlapping RED + nearby cyan/green lights into white.
+vec4 spl_evalChunkLights(vec3 cameraRelativePos) {
+    if (spl_atlas(0) != 1) return vec4(0.0);
+    int ox=spl_atlas(1), oz=spl_atlas(2), width=spl_atlas(3);
+    if (width < 1 || width > 129) return vec4(0.0);
+    vec3 p=cameraRelativePos+splAtlasCamera.xyz;
+    ivec2 cell=ivec2(floor(p.xz / 16.0));
+    if (any(lessThan(cell,ivec2(0))) || any(greaterThanEqual(cell,ivec2(width)))) return vec4(0.0);
+    int entry=8+2*(cell.y*width+cell.x);
+    int begin=spl_atlas(entry), count=spl_atlas(entry+1);
+    if (count <= 0) return vec4(0.0);
+    vec3 weightedHue=vec3(0.0);
+    float hueWeight=0.0;
+    float totalStrength=0.0;
+    for(int i=0;i<count;i++) {
+        int base=begin+i*8;
+        vec3 lpos=vec3(spl_float(base),spl_float(base+1),spl_float(base+2));
+        // Reduce ONLY the visual RGB tint radius; vanilla emission stays untouched.
+        float radius=max(spl_float(base+3),0.001);
+        if (dot(p-lpos,p-lpos) >= radius*radius) continue;
+        float distanceFactor=clamp(1.0-distance(p,lpos)/radius,0.0,1.0);
+        float influence=spl_float(base+7)*pow(distanceFactor,2.8);
+        vec3 rgb=max(vec3(0.0),vec3(spl_float(base+4),spl_float(base+5),spl_float(base+6)));
+        float peak=max(max(rgb.r,rgb.g),rgb.b);
+        if (peak <= 0.00001 || influence <= 0.00001) continue;
+        totalStrength+=influence*peak;
+        // Favor nearby, dominant emitters, not the huge number of distant ones.
+        float priority=influence*influence*peak;
+        weightedHue+=(rgb/peak)*priority;
+        hueWeight+=priority;
+    }
+    if (hueWeight <= 0.00001) return vec4(0.0);
+    vec3 hue=weightedHue/hueWeight;
+    return vec4(clamp(hue,0.0,1.0),max(totalStrength,0.0));
+}
+
 void main() {
     _vert_init();
     spl_OreLight = int(_material_params >> 3u);
@@ -54,6 +102,11 @@ void main() {
     vec3 translation = u_RegionOffset + _get_draw_translation(_draw_id);
     vec3 position = _vert_position + translation;
     spl_SurfaceCameraPos = position;
+#ifndef OIT_ALPHA_ONLY
+    splStationaryVertex = spl_evalChunkLights(position);
+#else
+    splStationaryVertex = vec4(0);
+#endif
 
 #ifdef USE_FOG
     v_FragDistance = getFragDistance(position);
