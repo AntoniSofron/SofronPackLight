@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "sofron_pack_light",
+  "version": "${version}",
+  "name": "26.3 Sofron Pack Light v0.1",
+  "description": "Vanilla-light dynamic lighting mod for Minecraft 26.3.",
+  "authors": [
+    "Sofron Pack"
+  ],
+  "environment": "*",
+  "entrypoints": {
+    "client": [
+      "pl.sofron.light.SofronPackLightClient"
+    ],
+    "main": [
+      "pl.sofron.light.SofronPackLight"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.19.5",
+    "minecraft": "26.3",
+    "java": ">=25",
+    "fabric-api": "*"
+  },
+  "mixins": [
+    "sofron.mixins.json"
+  ],
+  "icon": "assets/sofron_pack_light/icon.png"
+}

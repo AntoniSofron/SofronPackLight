@@ -1,0 +1,84 @@
+package pl.sofron.light.runtime;
+
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.util.ArrayDeque;
+import java.util.List;
+import pl.sofron.light.engine.LightOcclusion;
+
+/**
+ * Experimental client-side voxel light solver. Independent from the stationary
+ * source atlas; local brightness levels are propagated through non-opaque cells.
+ * Coordinates are absolute integer block positions. No chunk loads are forced.
+ */
+public final class DynamicVoxelField {
+    public static final int SIZE = 33;
+    public static final int CELLS = SIZE * SIZE * SIZE;
+    public record Emitter(int x, int y, int z, int level, int red, int green, int blue, int tintRange) {}
+    public record Snapshot(int x0, int y0, int z0, int[] voxels) {
+        public int sample(int x, int y, int z) {
+            int dx=x-x0, dy=y-y0, dz=z-z0;
+            return dx<0||dy<0||dz<0||dx>=SIZE||dy>=SIZE||dz>=SIZE ? 0 : voxels[index(dx,dy,dz)];
+        }
+    }
+    private DynamicVoxelField() {}
+    private static int index(int x,int y,int z) {return (y*SIZE+z)*SIZE+x;}
+    private static final int[] DX={1,-1,0,0,0,0};
+    private static final int[] DY={0,0,1,-1,0,0};
+    private static final int[] DZ={0,0,0,0,1,-1};
+    public static Snapshot propagate(int centerX,int centerY,int centerZ,
+                                     List<Emitter> emitters, LightOcclusion occlusion) {
+        int x0=centerX-SIZE/2, y0=centerY-SIZE/2, z0=centerZ-SIZE/2;
+        int[] brightness = new int[CELLS];
+        int[] r=new int[CELLS],g=new int[CELLS],b=new int[CELLS];
+        for (Emitter emitter:emitters) {
+            int sx=emitter.x-x0, sy=emitter.y-y0, sz=emitter.z-z0;
+            if(sx<0||sy<0||sz<0||sx>=SIZE||sy>=SIZE||sz>=SIZE)continue;
+            int origin=index(sx,sy,sz);
+            byte[] seen=new byte[CELLS];
+            ArrayDeque<Integer> queue=new ArrayDeque<>();
+            int sourceLevel=Math.max(0,Math.min(15,emitter.level));
+            if(sourceLevel==0)continue;
+            seen[origin]=(byte)sourceLevel;
+            queue.add(origin);
+            while(!queue.isEmpty()) {
+                int at=queue.removeFirst();
+                int level=Byte.toUnsignedInt(seen[at]);
+                if(level>brightness[at])brightness[at]=level;
+                int vx=at%SIZE, vy=at/(SIZE*SIZE), vz=(at/SIZE)%SIZE;
+                int dist=Math.abs(vx-sx)+Math.abs(vy-sy)+Math.abs(vz-sz);
+                if(dist<=Math.max(0,emitter.tintRange)) {
+                    // Preserve chromatic hue, distinct from the neutral brightness.
+                    // Max aggregation avoids turning same-color clusters white.
+                    float tintWeight=1f-(float)dist/(Math.max(1,emitter.tintRange)+1f);
+                    int vr=Math.round(Math.max(0,Math.min(255,emitter.red))*tintWeight);
+                    int vg=Math.round(Math.max(0,Math.min(255,emitter.green))*tintWeight);
+                    int vb=Math.round(Math.max(0,Math.min(255,emitter.blue))*tintWeight);
+                    if(vr>r[at])r[at]=vr;
+                    if(vg>g[at])g[at]=vg;
+                    if(vb>b[at])b[at]=vb;
+                }
+                if(level<=1) continue;
+                for(int face=0;face<6;face++) {
+                    int nx=vx+DX[face],ny=vy+DY[face],nz=vz+DZ[face];
+                    if(nx<0||ny<0||nz<0||nx>=SIZE||ny>=SIZE||nz>=SIZE)continue;
+                    int next=index(nx,ny,nz);
+                    int nextLevel=level-1;
+                    if(Byte.toUnsignedInt(seen[next])>=nextLevel)continue;
+                    if(occlusion.blocks(x0+nx,y0+ny,z0+nz))continue;
+                    seen[next]=(byte)nextLevel;
+                    queue.addLast(next);
+                }
+            }
+        }
+        int[] packed=new int[CELLS];
+        for(int i=0;i<CELLS;i++) packed[i]=((brightness[i]&255)<<24)|((r[i]&255)<<16)|((g[i]&255)<<8)|(b[i]&255);
+        return new Snapshot(x0,y0,z0,packed);
+    }
+    /** header (x0,y0,z0,size) followed by packed RGBA voxels */
+    public static void put(ByteBuffer buffer, Snapshot snapshot) {
+        buffer.order(ByteOrder.nativeOrder());
+        buffer.putInt(snapshot.x0).putInt(snapshot.y0).putInt(snapshot.z0).putInt(SIZE);
+        for(int voxel:snapshot.voxels)buffer.putInt(voxel);
+    }
+}

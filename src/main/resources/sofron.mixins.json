@@ -1,0 +1,19 @@
+{
+  "required": false,
+  "minVersion": "0.8",
+  "package": "pl.sofron.light.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "client": [
+    "MinecraftFramePrepareMixin",
+    "SodiumChunkRendererMixin",
+    "SodiumShaderLoadingMixin",
+    "SodiumRenderPassSyncMixin",
+    "SodiumRenderPearlLayoutMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "mixins": [
+    "BlockStateEmissionMixin"
+  ]
+}

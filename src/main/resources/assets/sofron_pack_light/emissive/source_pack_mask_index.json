@@ -1,0 +1,308 @@
+{
+  "format": "sofron-emissive-mask-index-v1",
+  "source_pack": "26.3 Sofron Pack 16x v0.9",
+  "mask_suffix": "_e",
+  "matches": [
+    {
+      "base": "assets/minecraft/optifine/ctm/golden_dandelion/0.png",
+      "mask": "assets/minecraft/optifine/ctm/golden_dandelion/0_e.png"
+    },
+    {
+      "base": "assets/minecraft/optifine/ctm/golden_dandelion/1.png",
+      "mask": "assets/minecraft/optifine/ctm/golden_dandelion/1_e.png"
+    },
+    {
+      "base": "assets/minecraft/optifine/ctm/golden_dandelion/2.png",
+      "mask": "assets/minecraft/optifine/ctm/golden_dandelion/2_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/activator_rail_on.png",
+      "mask": "assets/minecraft/textures/block/activator_rail_on_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/blast_furnace_front_on.png",
+      "mask": "assets/minecraft/textures/block/blast_furnace_front_on_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/cave_vines_lit.png",
+      "mask": "assets/minecraft/textures/block/cave_vines_lit_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/cave_vines_plant_lit.png",
+      "mask": "assets/minecraft/textures/block/cave_vines_plant_lit_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/coal_ore.png",
+      "mask": "assets/minecraft/textures/block/coal_ore_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/copper_ore.png",
+      "mask": "assets/minecraft/textures/block/copper_ore_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/copper_torch.png",
+      "mask": "assets/minecraft/textures/block/copper_torch_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/crimson_fungus.png",
+      "mask": "assets/minecraft/textures/block/crimson_fungus_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/crimson_fungus_top.png",
+      "mask": "assets/minecraft/textures/block/crimson_fungus_top_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/crimson_nylium.png",
+      "mask": "assets/minecraft/textures/block/crimson_nylium_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/crimson_nylium_side.png",
+      "mask": "assets/minecraft/textures/block/crimson_nylium_side_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/crimson_roots.png",
+      "mask": "assets/minecraft/textures/block/crimson_roots_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/crimson_stem.png",
+      "mask": "assets/minecraft/textures/block/crimson_stem_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/crimson_stem_top.png",
+      "mask": "assets/minecraft/textures/block/crimson_stem_top_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/crying_obsidian.png",
+      "mask": "assets/minecraft/textures/block/crying_obsidian_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/deepslate_coal_ore.png",
+      "mask": "assets/minecraft/textures/block/deepslate_coal_ore_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/deepslate_copper_ore.png",
+      "mask": "assets/minecraft/textures/block/deepslate_copper_ore_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/deepslate_diamond_ore.png",
+      "mask": "assets/minecraft/textures/block/deepslate_diamond_ore_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/deepslate_emerald_ore.png",
+      "mask": "assets/minecraft/textures/block/deepslate_emerald_ore_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/deepslate_gold_ore.png",
+      "mask": "assets/minecraft/textures/block/deepslate_gold_ore_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/deepslate_iron_ore.png",
+      "mask": "assets/minecraft/textures/block/deepslate_iron_ore_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/deepslate_lapis_ore.png",
+      "mask": "assets/minecraft/textures/block/deepslate_lapis_ore_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/deepslate_redstone_ore.png",
+      "mask": "assets/minecraft/textures/block/deepslate_redstone_ore_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/detector_rail_on.png",
+      "mask": "assets/minecraft/textures/block/detector_rail_on_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/diamond_ore.png",
+      "mask": "assets/minecraft/textures/block/diamond_ore_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/emerald_ore.png",
+      "mask": "assets/minecraft/textures/block/emerald_ore_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/fire_0.png",
+      "mask": "assets/minecraft/textures/block/fire_0_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/fire_1.png",
+      "mask": "assets/minecraft/textures/block/fire_1_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/furnace_front_on.png",
+      "mask": "assets/minecraft/textures/block/furnace_front_on_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/glowstone.png",
+      "mask": "assets/minecraft/textures/block/glowstone_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/gold_ore.png",
+      "mask": "assets/minecraft/textures/block/gold_ore_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/golden_dandelion.png",
+      "mask": "assets/minecraft/textures/block/golden_dandelion_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/iron_ore.png",
+      "mask": "assets/minecraft/textures/block/iron_ore_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/lapis_ore.png",
+      "mask": "assets/minecraft/textures/block/lapis_ore_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/lava_flow.png",
+      "mask": "assets/minecraft/textures/block/lava_flow_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/lava_still.png",
+      "mask": "assets/minecraft/textures/block/lava_still_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/magma.png",
+      "mask": "assets/minecraft/textures/block/magma_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/nether_gold_ore.png",
+      "mask": "assets/minecraft/textures/block/nether_gold_ore_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/nether_portal.png",
+      "mask": "assets/minecraft/textures/block/nether_portal_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/nether_quartz_ore.png",
+      "mask": "assets/minecraft/textures/block/nether_quartz_ore_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/nether_sprouts.png",
+      "mask": "assets/minecraft/textures/block/nether_sprouts_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/nether_wart_block.png",
+      "mask": "assets/minecraft/textures/block/nether_wart_block_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/powered_rail_on.png",
+      "mask": "assets/minecraft/textures/block/powered_rail_on_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/redstone_block.png",
+      "mask": "assets/minecraft/textures/block/redstone_block_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/redstone_dust_dot.png",
+      "mask": "assets/minecraft/textures/block/redstone_dust_dot_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/redstone_dust_line0.png",
+      "mask": "assets/minecraft/textures/block/redstone_dust_line0_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/redstone_dust_line1.png",
+      "mask": "assets/minecraft/textures/block/redstone_dust_line1_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/redstone_ore.png",
+      "mask": "assets/minecraft/textures/block/redstone_ore_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/redstone_torch.png",
+      "mask": "assets/minecraft/textures/block/redstone_torch_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/shroomlight.png",
+      "mask": "assets/minecraft/textures/block/shroomlight_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/smoker_front_on.png",
+      "mask": "assets/minecraft/textures/block/smoker_front_on_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/soul_fire_0.png",
+      "mask": "assets/minecraft/textures/block/soul_fire_0_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/soul_fire_1.png",
+      "mask": "assets/minecraft/textures/block/soul_fire_1_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/soul_torch.png",
+      "mask": "assets/minecraft/textures/block/soul_torch_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/torch.png",
+      "mask": "assets/minecraft/textures/block/torch_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/twisting_vines.png",
+      "mask": "assets/minecraft/textures/block/twisting_vines_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/twisting_vines_plant.png",
+      "mask": "assets/minecraft/textures/block/twisting_vines_plant_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/warped_fungus.png",
+      "mask": "assets/minecraft/textures/block/warped_fungus_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/warped_fungus_texture.png",
+      "mask": "assets/minecraft/textures/block/warped_fungus_texture_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/warped_nylium.png",
+      "mask": "assets/minecraft/textures/block/warped_nylium_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/warped_nylium_side.png",
+      "mask": "assets/minecraft/textures/block/warped_nylium_side_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/warped_roots.png",
+      "mask": "assets/minecraft/textures/block/warped_roots_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/warped_stem.png",
+      "mask": "assets/minecraft/textures/block/warped_stem_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/warped_stem_top.png",
+      "mask": "assets/minecraft/textures/block/warped_stem_top_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/warped_wart_block.png",
+      "mask": "assets/minecraft/textures/block/warped_wart_block_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/block/weeping_vines_plant.png",
+      "mask": "assets/minecraft/textures/block/weeping_vines_plant_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/item/copper_ingot.png",
+      "mask": "assets/minecraft/textures/item/copper_ingot_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/item/diamond.png",
+      "mask": "assets/minecraft/textures/item/diamond_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/item/gold_ingot.png",
+      "mask": "assets/minecraft/textures/item/gold_ingot_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/item/golden_apple.png",
+      "mask": "assets/minecraft/textures/item/golden_apple_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/item/iron_ingot.png",
+      "mask": "assets/minecraft/textures/item/iron_ingot_e.png"
+    },
+    {
+      "base": "assets/minecraft/textures/item/lapis_lazuli.png",
+      "mask": "assets/minecraft/textures/item/lapis_lazuli_e.png"
+    }
+  ],
+  "unmatched_masks": []
+}
