@@ -25,6 +25,8 @@ layout(std140) uniform SofronLights {
     vec4 splAtlasCamera;
 };
 layout(location = 9) in vec4 splStationaryVertex;
+layout(location = 10) flat in float splOreOpacity;
+layout(location = 11) in vec2 splMaskUV;
 uniform isamplerBuffer SofronVoxels;
 int voxelWord(int i) { return texelFetch(SofronVoxels, i).r; }
 // Packed dynamic voxel volume, appended to the stationary light atlas.
@@ -59,6 +61,7 @@ vec4 spl_evalDynamicSurface(vec3 cameraRelativePos) {
     // and orient the normal towards the live camera-relative fragment vector.
     vec3 dx = dFdx(cameraRelativePos);
     vec3 dy = dFdy(cameraRelativePos);
+    if (any(lessThan(world, vec3(-2))) || any(greaterThan(world, vec3(side+2)))) return vec4(0.0);
     vec3 geometric = cross(dx, dy);
     float normalSq = dot(geometric, geometric);
     if (normalSq < 1e-16) return vec4(0.0);
@@ -88,43 +91,6 @@ vec4 spl_evalDynamicSurface(vec3 cameraRelativePos) {
     vec4 v11=spl_voxelFetch(offset,side,q+da+db);
     vec4 interp=mix(mix(v00,v10,t[a]),mix(v01,v11,t[a]),t[b]);
     return clamp(interp,0.0,1.0);
-}
-uniform isamplerBuffer SofronOreRects;
-vec4 oreRect(int at) {
-    return intBitsToFloat(ivec4(texelFetch(SofronOreRects, at).r,
-        texelFetch(SofronOreRects, at+1).r, texelFetch(SofronOreRects, at+2).r,
-        texelFetch(SofronOreRects, at+3).r));
-}
-uniform isamplerBuffer SofronOreFades;
-int fadeWord(int i) { return texelFetch(SofronOreFades, i).r; }
-float oreLightOpacity(ivec3 pos) {
-    uint mask = uint(fadeWord(0));
-    if (mask == 0u) return 0.0;
-    uvec3 k = uvec3(pos);
-    uint slot = (k.x*73856093u ^ k.y*19349663u ^ k.z*83492791u) & mask;
-    for (uint probe = 0u; probe <= mask; ++probe) {
-        int at = 1 + int(slot)*6;
-        int state = fadeWord(at+3);
-        if (state == 0) return 0.0;
-        if (all(equal(pos, ivec3(fadeWord(at), fadeWord(at+1), fadeWord(at+2))))) {
-            float age = splPlayerRelative.w - intBitsToFloat(fadeWord(at+4));
-            return mix(intBitsToFloat(fadeWord(at+5)), state == 2 ? 1.0 : 0.0,
-                       smoothstep(0.0, 0.65, age));
-        }
-        slot = (slot+1u) & mask;
-    }
-    return 0.0;
-}
-
-float oreOpacity(vec3 inward) {
-    ivec3 block = ivec3(floor(spl_SurfaceCameraPos + splCameraFractionAndDarken.xyz + inward));
-    float distanceToPlayer = length(vec3(block) + 0.5 - splPlayerRelative.xyz);
-    if (distanceToPlayer >= 64.0) return 0.0;
-    if (distanceToPlayer <= 12.0) return 1.0;
-    float nearby = 1.0 - smoothstep(12.0, 16.0, distanceToPlayer);
-    float lightRange = 1.0 - smoothstep(56.0, 64.0, distanceToPlayer);
-    ivec3 absoluteBlock = block + splLightHeader.xyw;
-    return mix(nearby, 1.0, lightRange * oreLightOpacity(absoluteBlock));
 }
 uniform sampler2D u_BlockTex; // The block texture
 
@@ -218,10 +184,11 @@ void main() {
     // The original alpha=255 and fully transparent pixels are unchanged.
     ivec2 splTextureSize = textureSize(u_BlockTex, 0);
     ivec2 splPixel = clamp(ivec2(floor(v_TexCoord * vec2(splTextureSize))), ivec2(0), splTextureSize - ivec2(1));
-    float splRawAlpha = texelFetch(u_BlockTex, splPixel, 0).a;
+    vec4 rawTexel = texelFetch(u_BlockTex, splPixel, 0);
+    float splRawAlpha = rawTexel.a;
     float splEmissivePixel = 1.0 - step(0.45, abs(splRawAlpha * 255.0 - 254.0));
     if (spl_OreLight != 0) splEmissivePixel = 0.0;
-    vec3 splUnlitTexel = texelFetch(u_BlockTex, splPixel, 0).rgb;
+    vec3 splUnlitTexel = rawTexel.rgb;
     vec3 surfaceAlbedo = color.rgb * spl_UnlitVertexColor;
     color *= v_Color; // Apply per-vertex color modulator
 
@@ -280,41 +247,24 @@ void main() {
     // is already lit. Moving emitters supplement only missing light.
     // Crucially we DO NOT discard baked vertex tint/AO or construct a second
     // independently shaded surface: doing so exposed triangle seams.
-    vec4 vox = spl_evalDynamicSurface(spl_SurfaceCameraPos);
-    float movingMask=(1.0-smoothstep(0.22,0.70,spl_Sunlit))*(1.0-splFullbrightPreserve);
-    float targetCoord = max(spl_LightCoord.x, (vox.a * 15.0 + 0.5) / 16.0);
-    vec3 oldLight = texture(u_LightTex, spl_LightCoord).rgb;
-    vec3 newLight = texture(u_LightTex, vec2(targetCoord, spl_LightCoord.y)).rgb;
-    float chroma = max(max(vox.r, vox.g), vox.b);
-    vec3 hue = mix(vec3(1.0), vox.rgb / max(chroma, 0.0001), clamp(chroma, 0.0, 1.0));
-    color.rgb += surfaceAlbedo * max(newLight - oldLight, vec3(0.0)) * hue * movingMask;
+    if (splAtlasCamera.w > 0.0) {
+        vec4 vox = spl_evalDynamicSurface(spl_SurfaceCameraPos);
+        float movingMask=(1.0-smoothstep(0.22,0.70,spl_Sunlit))*(1.0-splFullbrightPreserve);
+        float targetCoord = max(spl_LightCoord.x, (vox.a * 15.0 + 0.5) / 16.0);
+        if (targetCoord > spl_LightCoord.x && movingMask > 0.0) {
+            vec3 oldLight = textureLod(u_LightTex, spl_LightCoord, 0.0).rgb;
+            vec3 newLight = textureLod(u_LightTex, vec2(targetCoord, spl_LightCoord.y), 0.0).rgb;
+            float chroma = max(max(vox.r, vox.g), vox.b);
+            vec3 hue = mix(vec3(1.0), vox.rgb / max(chroma, 0.0001), clamp(chroma, 0.0, 1.0));
+            color.rgb += surfaceAlbedo * max(newLight - oldLight, vec3(0.0)) * hue * movingMask;
+        }
+    }
     // Emissive is self-lit: preserve its unlightmapped base texture color
     // after BOTH stationary tint and moving light. Never brighten neighbors.
     color.rgb = mix(color.rgb, splUnlitTexel * spl_UnlitVertexColor, splEmissivePixel);
-    if (spl_OreLight != 0) {
-        vec3 n = cross(dFdx(spl_SurfaceCameraPos), dFdy(spl_SurfaceCameraPos));
-        n *= inversesqrt(max(dot(n,n), 1e-20));
-        if (dot(n, spl_SurfaceCameraPos) > 0.0) n = -n;
-        float opacity = oreOpacity(-n * 0.00025);
-        if (opacity > 0.0) {
-            int tile = texelFetch(SofronOreRects, 0).r;
-            ivec2 cell = splPixel / max(1,tile);
-            int slot = 3 + 2*(cell.x + cell.y * texelFetch(SofronOreRects, 1).r);
-            int begin = texelFetch(SofronOreRects, slot).r;
-            int pairs = texelFetch(SofronOreRects, slot+1).r;
-            int records = texelFetch(SofronOreRects, 2).r;
-            for (int i = 0; i < pairs; ++i) {
-                int rect = records + 8*texelFetch(SofronOreRects, begin+i).r;
-                vec4 base = oreRect(rect);
-                if (any(lessThan(v_TexCoord, base.xy)) || any(greaterThanEqual(v_TexCoord, base.zw))) continue;
-                vec4 mask = oreRect(rect+4);
-                vec2 localUV = (v_TexCoord - base.xy) / (base.zw - base.xy);
-                ivec2 maskPixel = ivec2(mix(mask.xy, mask.zw, localUV) * vec2(splTextureSize));
-                vec4 overlay = texelFetch(u_BlockTex, maskPixel, 0);
-                color.rgb = mix(color.rgb, overlay.rgb * spl_UnlitVertexColor, overlay.a * opacity);
-                break;
-            }
-        }
+    if (splOreOpacity > 0.0) {
+        vec4 overlay = texelFetch(u_BlockTex, ivec2(splMaskUV * vec2(splTextureSize)), 0);
+        color.rgb = mix(color.rgb, overlay.rgb * spl_UnlitVertexColor, overlay.a * splOreOpacity);
     }
     fragColor = calculateFinalColor(color);
     #endif

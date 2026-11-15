@@ -22,7 +22,9 @@ abstract class OreMeshMixin extends AbstractBlockRenderContext {
         if (base == null || !OreMasks.current().pairs().containsKey(base)) return bits;
         var level = ((LevelSliceAccessor)(Object)slice).sofron$level();
         pl.sofron.light.emissive.OreFades.observe(level.getLightEngine(),pos);
-        return bits | (1 << 3);
+        // The three parity bits identify the block owning a vertex on a shared face.
+        return bits | (1 << 3) | ((pos.getX() & 1) << 4)
+            | ((pos.getY() & 1) << 5) | ((pos.getZ() & 1) << 6);
     }
 
     @Redirect(method = "bufferQuad", at = @At(value = "INVOKE", target =

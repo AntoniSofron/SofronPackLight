@@ -56,18 +56,42 @@ layout(location = 9) out vec4 splStationaryVertex;
 uniform isamplerBuffer SofronLightAtlas;
 int spl_atlas(int i) { return texelFetch(SofronLightAtlas, i).r; }
 float spl_float(int i) { return intBitsToFloat(spl_atlas(i)); }
-// Keep chromaticity and strength separate. Per-channel clamping of the sum
-// turned strongly overlapping RED + nearby cyan/green lights into white.
+// Store energy-weighted hue during interpolation to keep dark nodes neutral.
+vec4 bakedNode(int i) {
+    uint packedHue = uint(spl_atlas(i));
+    vec3 hue = vec3((uvec3(packedHue) >> uvec3(0u,8u,16u)) & uvec3(255u)) / 255.0;
+    float energy = spl_float(i+1);
+    return vec4(hue * energy, energy);
+}
+
+vec4 bakedLight(int start, vec3 p) {
+    ivec3 cell = min(ivec3(p), ivec3(7));
+    vec3 t = p - vec3(cell);
+    int i = start + 2*((cell.z*9 + cell.y)*9 + cell.x);
+    vec4 lo = mix(mix(bakedNode(i), bakedNode(i+2), t.x),
+                  mix(bakedNode(i+18), bakedNode(i+20), t.x), t.y);
+    i += 162;
+    vec4 hi = mix(mix(bakedNode(i), bakedNode(i+2), t.x),
+                  mix(bakedNode(i+18), bakedNode(i+20), t.x), t.y);
+    vec4 result = mix(lo, hi, t.z);
+    return vec4(result.rgb / max(result.a, 1e-10), result.a);
+}
+
 vec4 spl_evalChunkLights(vec3 cameraRelativePos) {
-    if (spl_atlas(0) != 1) return vec4(0.0);
-    int ox=spl_atlas(1), oz=spl_atlas(2), width=spl_atlas(3);
-    if (width < 1 || width > 129) return vec4(0.0);
-    vec3 p=cameraRelativePos+splAtlasCamera.xyz;
-    ivec2 cell=ivec2(floor(p.xz / 16.0));
-    if (any(lessThan(cell,ivec2(0))) || any(greaterThanEqual(cell,ivec2(width)))) return vec4(0.0);
-    int entry=8+2*(cell.y*width+cell.x);
-    int begin=spl_atlas(entry), count=spl_atlas(entry+1);
-    if (count <= 0) return vec4(0.0);
+    int width = spl_atlas(0);
+    vec3 position = cameraRelativePos + splAtlasCamera.xyz;
+    ivec3 section = ivec3(floor(position / 16.0));
+    if (any(lessThan(section.xz,ivec2(0))) || any(greaterThanEqual(section.xz,ivec2(width)))) return vec4(0.0);
+    int column = spl_atlas(1 + section.z*width + section.x);
+    if (column == 0) return vec4(0.0);
+    int row = section.y - spl_atlas(column);
+    if (row < 0 || row >= spl_atlas(column+1)) return vec4(0.0);
+    int offset = spl_atlas(column+2+row);
+    if (offset == 0) return vec4(0.0);
+    int begin = column+offset+1;
+    int count = spl_atlas(begin-1);
+    vec3 p = position - vec3(section)*16.0;
+    if (count < 0) return bakedLight(begin, p * 0.5);
     vec3 weightedHue=vec3(0.0);
     float hueWeight=0.0;
     float totalStrength=0.0;
@@ -93,9 +117,70 @@ vec4 spl_evalChunkLights(vec3 cameraRelativePos) {
     return vec4(clamp(hue,0.0,1.0),max(totalStrength,0.0));
 }
 
+uniform isamplerBuffer SofronOreRects;
+vec4 oreRect(int at) {
+    return intBitsToFloat(ivec4(texelFetch(SofronOreRects, at).r,
+        texelFetch(SofronOreRects, at+1).r, texelFetch(SofronOreRects, at+2).r,
+        texelFetch(SofronOreRects, at+3).r));
+}
+uniform isamplerBuffer SofronOreFades;
+int fadeWord(int i) { return texelFetch(SofronOreFades, i).r; }
+float oreLightOpacity(ivec3 pos) {
+    uint mask = uint(fadeWord(0));
+    if (mask == 0u) return 0.0;
+    uvec3 k = uvec3(pos);
+    uint slot = (k.x*73856093u ^ k.y*19349663u ^ k.z*83492791u) & mask;
+    for (uint probe = 0u; probe <= mask; ++probe) {
+        int at = 1 + int(slot)*6;
+        int state = fadeWord(at+3);
+        if (state == 0) return 0.0;
+        if (all(equal(pos, ivec3(fadeWord(at), fadeWord(at+1), fadeWord(at+2))))) {
+            float age = splPlayerRelative.w - intBitsToFloat(fadeWord(at+4));
+            return mix(intBitsToFloat(fadeWord(at+5)), state == 2 ? 1.0 : 0.0,
+                       smoothstep(0.0, 0.65, age));
+        }
+        slot = (slot+1u) & mask;
+    }
+    return 0.0;
+}
+
+float oreOpacity(ivec3 block) {
+    float distanceToPlayer = length(vec3(block) + 0.5 - splPlayerRelative.xyz);
+    if (distanceToPlayer >= 64.0) return 0.0;
+    if (distanceToPlayer <= 12.0) return 1.0;
+    float nearby = 1.0 - smoothstep(12.0, 16.0, distanceToPlayer);
+    float lightRange = 1.0 - smoothstep(56.0, 64.0, distanceToPlayer);
+    ivec3 absoluteBlock = block + splLightHeader.xyw;
+    return mix(nearby, 1.0, lightRange * oreLightOpacity(absoluteBlock));
+}
+
+layout(location = 10) flat out float splOreOpacity;
+layout(location = 11) out vec2 splMaskUV;
+
+void mapOreMask() {
+    // Sodium stores UVs rounded towards the sprite interior at both edges.
+    vec2 uv = _vert_tex_diffuse_coord;
+    int tile = texelFetch(SofronOreRects, 0).r;
+    if (tile <= 0) { splOreOpacity = 0.0; return; }
+    ivec2 cell = ivec2(uv / u_TexelSize) / tile;
+    int slot = 3 + 2*(cell.x + cell.y * texelFetch(SofronOreRects, 1).r);
+    int begin = texelFetch(SofronOreRects, slot).r;
+    int count = texelFetch(SofronOreRects, slot+1).r;
+    int records = texelFetch(SofronOreRects, 2).r;
+    for (int i = 0; i < count; ++i) {
+        int rect = records + 8*texelFetch(SofronOreRects, begin+i).r;
+        vec4 base = oreRect(rect);
+        if (any(lessThan(uv, base.xy)) || any(greaterThanEqual(uv, base.zw))) continue;
+        vec4 mask = oreRect(rect+4);
+        splMaskUV = mix(mask.xy, mask.zw, (v_TexCoord - base.xy) / (base.zw - base.xy));
+        return;
+    }
+    splOreOpacity = 0.0;
+}
+
 void main() {
     _vert_init();
-    spl_OreLight = int(_material_params >> 3u);
+    spl_OreLight = int((_material_params >> 3u) & 1u);
 
     // Transform the chunk-local vertex position into world model space
     vec3 translation = u_RegionOffset + _get_draw_translation(_draw_id);
@@ -135,4 +220,15 @@ void main() {
 #endif
 
     v_TexCoord = (_vert_tex_diffuse_coord_bias * u_TexCoordShrink) + _vert_tex_diffuse_coord; // FMA for precision
+    splOreOpacity = 0.0;
+    splMaskUV = vec2(0.0);
+#ifndef OIT_ALPHA_ONLY
+    if (spl_OreLight != 0) {
+        vec3 parity = vec3((uvec3(_material_params) >> uvec3(4u,5u,6u)) & uvec3(1u));
+        ivec3 local = ivec3(floor((_vert_position - parity + 0.5) * 0.5) * 2.0 + parity);
+        ivec3 block = ivec3(round(translation + splCameraFractionAndDarken.xyz)) + local;
+        splOreOpacity = oreOpacity(block);
+        if (splOreOpacity > 0.0) mapOreMask();
+    }
+#endif
 }

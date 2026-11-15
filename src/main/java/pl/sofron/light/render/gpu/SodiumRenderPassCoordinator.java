@@ -21,6 +21,7 @@ public final class SodiumRenderPassCoordinator {
     private static pl.sofron.light.runtime.DynamicVoxelField.Snapshot lastVoxels;
     private static final java.nio.ByteBuffer voxelBytes = java.nio.ByteBuffer.allocateDirect(
         16 + 4 * pl.sofron.light.runtime.DynamicVoxelField.CELLS).order(java.nio.ByteOrder.nativeOrder());
+    private static final ChunkLightAtlas stationaryAtlas = new ChunkLightAtlas();
     private static long lastRevision = Long.MIN_VALUE;
     private static int lastOriginX, lastOriginZ, lastWidth;
     private static final RenderPearlLightUniformPayload payload = new RenderPearlLightUniformPayload();
@@ -62,9 +63,9 @@ public final class SodiumRenderPassCoordinator {
         int width = 2*distance+1;
         int originX = (mc.player.blockPosition().getX() >> 4)-distance;
         int originZ = (mc.player.blockPosition().getZ() >> 4)-distance;
-        payload.update(debugMode, originX, originZ, x, y, z);
-        nativeBuffer.upload(payload);
         var field = SofronPackLightClient.VOXELS.field();
+        payload.update(debugMode, originX, originZ, x, y, z, field != null);
+        nativeBuffer.upload(payload);
         if (voxelBuffer == null || field != lastVoxels) {
             if (voxelBuffer == null) voxelBuffer = new RenderPearlChunkAtlasBuffer(RenderSystem.getDevice(), "SofronVoxels");
             voxelBytes.clear();
@@ -76,7 +77,7 @@ public final class SodiumRenderPassCoordinator {
         var index = SofronPackLightClient.LIGHTS.chunkIndex();
         if (index.revision() != lastRevision || width != lastWidth || originX != lastOriginX || originZ != lastOriginZ) {
             try {
-                ChunkLightAtlas.Snapshot atlas=ChunkLightAtlas.build(index,originX,originZ,width,0,0,0);
+                ChunkLightAtlas.Snapshot atlas=stationaryAtlas.build(index,originX,originZ,width);
                 chunkAtlasBuffer.upload(atlas);
                 diagnosticAtlasReferences = atlas.lightReferences();
                 diagnosticAtlasCells = atlas.chunkCount();
@@ -86,7 +87,7 @@ public final class SodiumRenderPassCoordinator {
                 diagnosticAtlasCells = 1;
                 // A very dense world must not crash the renderer. Disable this
                 // frame's stationary RGB rather than reuse a stale atlas.
-                chunkAtlasBuffer.upload(ChunkLightAtlas.empty(x,y,z));
+                chunkAtlasBuffer.upload(ChunkLightAtlas.empty());
             }
             lastRevision = index.revision();
             lastWidth = width;
@@ -105,6 +106,6 @@ public final class SodiumRenderPassCoordinator {
         voxelBuffer.bind(pass);
         submissions++;
     }
-    public static void close() { if (nativeBuffer != null) nativeBuffer.close(); nativeBuffer = null; if(chunkAtlasBuffer!=null) chunkAtlasBuffer.close(); chunkAtlasBuffer=null; if(oreBuffer!=null) oreBuffer.close(); oreBuffer=null; uploadedMasks=null; if(fadeBuffer!=null) fadeBuffer.close(); fadeBuffer=null; uploadedFades=null; if(voxelBuffer!=null) voxelBuffer.close(); voxelBuffer=null; lastVoxels=null; lastRevision=Long.MIN_VALUE; }
+    public static void close() { stationaryAtlas.clear(); if (nativeBuffer != null) nativeBuffer.close(); nativeBuffer = null; if(chunkAtlasBuffer!=null) chunkAtlasBuffer.close(); chunkAtlasBuffer=null; if(oreBuffer!=null) oreBuffer.close(); oreBuffer=null; uploadedMasks=null; if(fadeBuffer!=null) fadeBuffer.close(); fadeBuffer=null; uploadedFades=null; if(voxelBuffer!=null) voxelBuffer.close(); voxelBuffer=null; lastVoxels=null; lastRevision=Long.MIN_VALUE; }
     public static long submissions() { return submissions; }
 }
