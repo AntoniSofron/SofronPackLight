@@ -15,6 +15,8 @@ public final class SodiumRenderPassCoordinator {
     private static RenderPearlChunkAtlasBuffer chunkAtlasBuffer;
     private static RenderPearlChunkAtlasBuffer oreBuffer;
     private static OreMasks uploadedMasks;
+    private static RenderPearlChunkAtlasBuffer fadeBuffer;
+    private static java.nio.ByteBuffer uploadedFades;
     private static RenderPearlChunkAtlasBuffer voxelBuffer;
     private static pl.sofron.light.runtime.DynamicVoxelField.Snapshot lastVoxels;
     private static final java.nio.ByteBuffer voxelBytes = java.nio.ByteBuffer.allocateDirect(
@@ -42,6 +44,12 @@ public final class SodiumRenderPassCoordinator {
         if (uploadedMasks != masks) {
             oreBuffer.upload(masks.rectangles().duplicate());
             uploadedMasks = masks;
+        }
+        if (fadeBuffer == null) fadeBuffer = new RenderPearlChunkAtlasBuffer(RenderSystem.getDevice(), "SofronOreFades");
+        var fades = pl.sofron.light.emissive.OreFades.current().bytes();
+        if (uploadedFades != fades) {
+            fadeBuffer.upload(fades.duplicate());
+            uploadedFades = fades;
         }
         int debugMode = switch (SofronPackLightClient.CONFIG.rgbDebugMode) {
             case "raw" -> 1;
@@ -93,9 +101,10 @@ public final class SodiumRenderPassCoordinator {
         nativeBuffer.bind(pass);
         if (chunkAtlasBuffer != null) chunkAtlasBuffer.bind(pass);
         oreBuffer.bind(pass);
+        fadeBuffer.bind(pass);
         voxelBuffer.bind(pass);
         submissions++;
     }
-    public static void close() { if (nativeBuffer != null) nativeBuffer.close(); nativeBuffer = null; if(chunkAtlasBuffer!=null) chunkAtlasBuffer.close(); chunkAtlasBuffer=null; if(oreBuffer!=null) oreBuffer.close(); oreBuffer=null; uploadedMasks=null; if(voxelBuffer!=null) voxelBuffer.close(); voxelBuffer=null; lastVoxels=null; lastRevision=Long.MIN_VALUE; }
+    public static void close() { if (nativeBuffer != null) nativeBuffer.close(); nativeBuffer = null; if(chunkAtlasBuffer!=null) chunkAtlasBuffer.close(); chunkAtlasBuffer=null; if(oreBuffer!=null) oreBuffer.close(); oreBuffer=null; uploadedMasks=null; if(fadeBuffer!=null) fadeBuffer.close(); fadeBuffer=null; uploadedFades=null; if(voxelBuffer!=null) voxelBuffer.close(); voxelBuffer=null; lastVoxels=null; lastRevision=Long.MIN_VALUE; }
     public static long submissions() { return submissions; }
 }

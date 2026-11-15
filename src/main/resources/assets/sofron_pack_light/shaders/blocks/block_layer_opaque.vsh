@@ -50,7 +50,6 @@ layout(std140) uniform SofronLights {
     ivec4 splLightHeader;
     vec4 splCameraFractionAndDarken;
     vec4 splPlayerRelative;
-    ivec4 splLookTarget;
     vec4 splAtlasCamera;
 };
 layout(location = 9) out vec4 splStationaryVertex;

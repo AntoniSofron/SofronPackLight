@@ -7,8 +7,6 @@ import net.caffeinemc.mods.sodium.client.render.model.AbstractBlockRenderContext
 import net.caffeinemc.mods.sodium.client.render.model.MutableQuadViewImpl;
 import net.caffeinemc.mods.sodium.client.render.texture.SpriteFinderCache;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
-import net.minecraft.world.level.LightLayer;
-import net.minecraft.core.Direction;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
@@ -22,14 +20,9 @@ abstract class OreMeshMixin extends AbstractBlockRenderContext {
         int bits = material.bits();
         var base = quad.sprite(SpriteFinderCache.forBlockAtlas());
         if (base == null || !OreMasks.current().pairs().containsKey(base)) return bits;
-        // Bits 0..2 belong to Sodium. One illuminated side reveals the whole block.
-        int sky = 0;
-        for (Direction side : Direction.values()) {
-            var outside = pos.relative(side);
-            if (slice.getBrightness(LightLayer.BLOCK, outside) > 5) return bits | (17 << 3);
-            sky = Math.max(sky, slice.getBrightness(LightLayer.SKY, outside));
-        }
-        return bits | ((1 + sky) << 3);
+        var level = ((LevelSliceAccessor)(Object)slice).sofron$level();
+        pl.sofron.light.emissive.OreFades.observe(level.getLightEngine(),pos);
+        return bits | (1 << 3);
     }
 
     @Redirect(method = "bufferQuad", at = @At(value = "INVOKE", target =

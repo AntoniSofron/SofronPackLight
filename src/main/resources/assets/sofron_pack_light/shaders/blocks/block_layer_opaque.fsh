@@ -22,7 +22,6 @@ layout(std140) uniform SofronLights {
     ivec4 splLightHeader;
     vec4 splCameraFractionAndDarken;
     vec4 splPlayerRelative;
-    ivec4 splLookTarget;
     vec4 splAtlasCamera;
 };
 layout(location = 9) in vec4 splStationaryVertex;
@@ -96,14 +95,36 @@ vec4 oreRect(int at) {
         texelFetch(SofronOreRects, at+1).r, texelFetch(SofronOreRects, at+2).r,
         texelFetch(SofronOreRects, at+3).r));
 }
-bool oreVisible(vec3 inward) {
-    // Work relative to the integer camera block to preserve precision far from spawn.
+uniform isamplerBuffer SofronOreFades;
+int fadeWord(int i) { return texelFetch(SofronOreFades, i).r; }
+float oreLightOpacity(ivec3 pos) {
+    uint mask = uint(fadeWord(0));
+    if (mask == 0u) return 0.0;
+    uvec3 k = uvec3(pos);
+    uint slot = (k.x*73856093u ^ k.y*19349663u ^ k.z*83492791u) & mask;
+    for (uint probe = 0u; probe <= mask; ++probe) {
+        int at = 1 + int(slot)*6;
+        int state = fadeWord(at+3);
+        if (state == 0) return 0.0;
+        if (all(equal(pos, ivec3(fadeWord(at), fadeWord(at+1), fadeWord(at+2))))) {
+            float age = splPlayerRelative.w - intBitsToFloat(fadeWord(at+4));
+            return mix(intBitsToFloat(fadeWord(at+5)), state == 2 ? 1.0 : 0.0,
+                       smoothstep(0.0, 0.65, age));
+        }
+        slot = (slot+1u) & mask;
+    }
+    return 0.0;
+}
+
+float oreOpacity(vec3 inward) {
     ivec3 block = ivec3(floor(spl_SurfaceCameraPos + splCameraFractionAndDarken.xyz + inward));
-    vec3 delta = vec3(block) + 0.5 - splPlayerRelative.xyz;
-    float rangeSq = dot(delta, delta);
-    bool lit = spl_OreLight == 17 || float(spl_OreLight - 1) - splCameraFractionAndDarken.w > 5.0;
-    return rangeSq <= 256.0 || (rangeSq <= 4096.0 && lit) ||
-        (rangeSq <= 1024.0 && splLookTarget.w != 0 && all(equal(block, splLookTarget.xyz)));
+    float distanceToPlayer = length(vec3(block) + 0.5 - splPlayerRelative.xyz);
+    if (distanceToPlayer >= 64.0) return 0.0;
+    if (distanceToPlayer <= 12.0) return 1.0;
+    float nearby = 1.0 - smoothstep(12.0, 16.0, distanceToPlayer);
+    float lightRange = 1.0 - smoothstep(56.0, 64.0, distanceToPlayer);
+    ivec3 absoluteBlock = block + splLightHeader.xyw;
+    return mix(nearby, 1.0, lightRange * oreLightOpacity(absoluteBlock));
 }
 uniform sampler2D u_BlockTex; // The block texture
 
@@ -274,7 +295,8 @@ void main() {
         vec3 n = cross(dFdx(spl_SurfaceCameraPos), dFdy(spl_SurfaceCameraPos));
         n *= inversesqrt(max(dot(n,n), 1e-20));
         if (dot(n, spl_SurfaceCameraPos) > 0.0) n = -n;
-        if (oreVisible(-n * 0.00025)) {
+        float opacity = oreOpacity(-n * 0.00025);
+        if (opacity > 0.0) {
             int tile = texelFetch(SofronOreRects, 0).r;
             ivec2 cell = splPixel / max(1,tile);
             int slot = 3 + 2*(cell.x + cell.y * texelFetch(SofronOreRects, 1).r);
@@ -289,7 +311,7 @@ void main() {
                 vec2 localUV = (v_TexCoord - base.xy) / (base.zw - base.xy);
                 ivec2 maskPixel = ivec2(mix(mask.xy, mask.zw, localUV) * vec2(splTextureSize));
                 vec4 overlay = texelFetch(u_BlockTex, maskPixel, 0);
-                color.rgb = mix(color.rgb, overlay.rgb * spl_UnlitVertexColor, overlay.a);
+                color.rgb = mix(color.rgb, overlay.rgb * spl_UnlitVertexColor, overlay.a * opacity);
                 break;
             }
         }

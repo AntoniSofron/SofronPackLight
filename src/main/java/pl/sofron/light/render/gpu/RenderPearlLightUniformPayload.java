@@ -5,7 +5,7 @@ import java.nio.ByteOrder;
 
 /** Shared std140 frame parameters for the terrain vertex and fragment shaders. */
 public final class RenderPearlLightUniformPayload {
-    public static final int BYTE_SIZE = 80;
+    public static final int BYTE_SIZE = 64;
     private final ByteBuffer data = ByteBuffer.allocateDirect(BYTE_SIZE).order(ByteOrder.nativeOrder());
 
     public void update(int debugMode, int originX, int originZ, double x, double y, double z) {

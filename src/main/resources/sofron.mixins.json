@@ -12,7 +12,9 @@
     "OreAtlasMixin",
     "OreMeshMixin",
     "SingleOreSpriteMixin",
-    "LightIndexMixin"
+    "LightIndexMixin",
+    "LevelSliceAccessor",
+    "OreLightUpdateMixin"
   ],
   "injectors": {
     "defaultRequire": 1
