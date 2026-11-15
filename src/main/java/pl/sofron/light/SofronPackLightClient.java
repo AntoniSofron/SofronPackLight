@@ -23,6 +23,7 @@ public final class SofronPackLightClient implements ClientModInitializer {
         CONFIG = LightConfig.load(FabricLoader.getInstance().getConfigDir().resolve("sofron-pack-light.json"));
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             pl.sofron.light.emissive.OreFades.tick(client);
+            pl.sofron.light.runtime.LeafDetailRange.tick(client);
             LIGHTS.tick(client, CONFIG);
             VOXELS.tick(client, CONFIG);
             PROBE.tick(client, LIGHTS, CONFIG);

@@ -23,7 +23,7 @@ public abstract class SodiumRenderPearlLayoutMixin {
             com.mojang.renderpearl.api.GpuFormat.R32_SINT)
         .withUniform("SofronVoxels", UniformType.TEXEL_BUFFER, com.mojang.renderpearl.api.GpuFormat.R32_SINT)
         .withUniform("SofronOreFades", UniformType.TEXEL_BUFFER, com.mojang.renderpearl.api.GpuFormat.R32_SINT)
-        .withUniform("SofronOreRects", UniformType.TEXEL_BUFFER, com.mojang.renderpearl.api.GpuFormat.R32_SINT)
+        .withUniform("SofronOreRects", UniformType.TEXEL_BUFFER, com.mojang.renderpearl.api.GpuFormat.RGBA32_SINT)
         .build();
 
     @ModifyArg(method = {"createShader", "createOITShader"},

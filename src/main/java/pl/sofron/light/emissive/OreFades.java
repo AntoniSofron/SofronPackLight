@@ -5,7 +5,7 @@ import java.nio.ByteOrder;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
-import java.util.Set;
+import java.util.concurrent.atomic.AtomicLongArray;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import net.minecraft.client.Minecraft;
@@ -25,6 +25,7 @@ public final class OreFades {
     private final Map<Long, Section> sections = new ConcurrentHashMap<>();
     private final Map<Long, Fade> lit = new HashMap<>();
     private final AtomicBoolean needsUpdate = new AtomicBoolean(true);
+    private volatile long playerSection;
     private int lastX, lastY, lastZ;
     private float nextExpiry = Float.POSITIVE_INFINITY;
     private float animationEnd;
@@ -34,7 +35,19 @@ public final class OreFades {
     private ByteBuffer bytes = pack();
 
     private static final class Section {
-        final Set<Long> positions = ConcurrentHashMap.newKeySet();
+        // One bit per local block. Mesh workers may report the same position concurrently.
+        final AtomicLongArray positions = new AtomicLongArray(64);
+
+        boolean add(BlockPos pos) {
+            int word = ((pos.getY() & 15) << 2) | ((pos.getZ() & 15) >> 2);
+            long bit = 1L << (((pos.getZ() & 3) << 4) | (pos.getX() & 15));
+            long old;
+            do {
+                old = positions.get(word);
+                if ((old & bit) != 0) return false;
+            } while (!positions.compareAndSet(word, old, old | bit));
+            return true;
+        }
         final AtomicBoolean dirty = new AtomicBoolean(true);
         boolean active;
     }
@@ -55,9 +68,12 @@ public final class OreFades {
         var world = current;
         if (world.engine != engine) return;
         var section = world.sections.computeIfAbsent(SectionPos.asLong(pos), key -> new Section());
-        if (section.positions.add(pos.asLong())) {
+        if (section.add(pos)) {
             section.dirty.set(true);
-            world.needsUpdate.set(true);
+            long player = world.playerSection;
+            if (Math.abs((pos.getX() >> 4)-SectionPos.x(player)) <= 4
+                    && Math.abs((pos.getY() >> 4)-SectionPos.y(player)) <= 4
+                    && Math.abs((pos.getZ() >> 4)-SectionPos.z(player)) <= 4) world.needsUpdate.set(true);
         }
     }
 
@@ -83,6 +99,7 @@ public final class OreFades {
     private void update(ClientLevel level, BlockPos player) {
         float now = seconds();
         int px = player.getX() >> 4, py = player.getY() >> 4, pz = player.getZ() >> 4;
+        playerSection = SectionPos.asLong(px, py, pz);
         int darken = level.getSkyDarken();
         boolean changed = false;
         boolean prune = ++age % 40 == 0;
@@ -97,11 +114,23 @@ public final class OreFades {
             int x = SectionPos.x(key), y = SectionPos.y(key), z = SectionPos.z(key);
             boolean unloaded = prune && !level.hasChunk(x,z);
             boolean active = !unloaded && Math.abs(x-px)<=4 && Math.abs(y-py)<=4 && Math.abs(z-pz)<=4;
-            if (active) {
-                if (section.dirty.getAndSet(false) || !section.active || darken != lastDarken) {
-                    for (long pos : section.positions) {
+            boolean refresh = active && (section.dirty.getAndSet(false) || !section.active || darken != lastDarken);
+            if (refresh || (!active && section.active)) {
+                var block = new BlockPos.MutableBlockPos();
+                var neighbor = new BlockPos.MutableBlockPos();
+                for (int word = 0; word < 64; word++) {
+                    long bits = section.positions.get(word);
+                    while (bits != 0) {
+                        int local = word*64 + Long.numberOfTrailingZeros(bits);
+                        bits &= bits-1;
+                        block.set(x*16+(local&15), y*16+(local>>8), z*16+((local>>4)&15));
+                        long pos = block.asLong();
+                        if (!active) {
+                            changed |= lit.remove(pos) != null;
+                            continue;
+                        }
                         var start = lit.get(pos);
-                        boolean on = illuminated(level, BlockPos.of(pos), darken);
+                        boolean on = illuminated(level, block, neighbor, darken);
                         if (on != (start != null && start.on)) {
                             lit.put(pos, new Fade(now, start == null ? 0f : start.value(now), on));
                             animationEnd = Math.nextUp(now + DURATION);
@@ -109,8 +138,6 @@ public final class OreFades {
                         }
                     }
                 }
-            } else if (section.active) {
-                for (long pos : section.positions) changed |= lit.remove(pos) != null;
             }
             section.active = active;
             if (unloaded) sections.remove(key,section);
@@ -127,8 +154,7 @@ public final class OreFades {
         if (changed) bytes = pack();
     }
 
-    private static boolean illuminated(ClientLevel level, BlockPos block, int darken) {
-        var neighbor = new BlockPos.MutableBlockPos();
+    private static boolean illuminated(ClientLevel level, BlockPos block, BlockPos.MutableBlockPos neighbor, int darken) {
         for (var side : SIDES) {
             neighbor.setWithOffset(block,side);
             if (level.getRawBrightness(neighbor,darken) >= 5) return true;

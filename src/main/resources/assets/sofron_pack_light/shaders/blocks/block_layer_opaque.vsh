@@ -119,11 +119,6 @@ vec4 spl_evalChunkLights(vec3 cameraRelativePos) {
 }
 
 uniform isamplerBuffer SofronOreRects;
-vec4 oreRect(int at) {
-    return intBitsToFloat(ivec4(texelFetch(SofronOreRects, at).r,
-        texelFetch(SofronOreRects, at+1).r, texelFetch(SofronOreRects, at+2).r,
-        texelFetch(SofronOreRects, at+3).r));
-}
 uniform isamplerBuffer SofronOreFades;
 int fadeWord(int i) { return texelFetch(SofronOreFades, i).r; }
 float oreLightOpacity(ivec3 pos) {
@@ -161,19 +156,21 @@ layout(location = 11) out vec2 splMaskUV;
 void mapOreMask() {
     // Sodium stores UVs rounded towards the sprite interior at both edges.
     vec2 uv = _vert_tex_diffuse_coord;
-    int tile = texelFetch(SofronOreRects, 0).r;
-    if (tile <= 0) { splOreOpacity = 0.0; return; }
-    ivec2 cell = ivec2(uv / u_TexelSize) / tile;
-    int slot = 3 + 2*(cell.x + cell.y * texelFetch(SofronOreRects, 1).r);
-    int begin = texelFetch(SofronOreRects, slot).r;
-    int count = texelFetch(SofronOreRects, slot+1).r;
-    int records = texelFetch(SofronOreRects, 2).r;
-    for (int i = 0; i < count; ++i) {
-        int rect = records + 8*texelFetch(SofronOreRects, begin+i).r;
-        vec4 base = oreRect(rect);
+    ivec2 grid = texelFetch(SofronOreRects, 0).xy;
+    if (grid.x <= 0) { splOreOpacity = 0.0; return; }
+    ivec2 cell = ivec2(uv / u_TexelSize) / grid.x;
+    ivec4 entry = texelFetch(SofronOreRects, 1 + cell.x + cell.y*grid.y);
+    if (entry.x > 0) {
+        vec4 transform = intBitsToFloat(entry);
+        splMaskUV = v_TexCoord * transform.xy + transform.zw;
+        return;
+    }
+    for (int i = 0; i < -entry.x; i++) {
+        int at = entry.y + 2*i;
+        vec4 base = intBitsToFloat(texelFetch(SofronOreRects, at));
         if (any(lessThan(uv, base.xy)) || any(greaterThanEqual(uv, base.zw))) continue;
-        vec4 mask = oreRect(rect+4);
-        splMaskUV = mix(mask.xy, mask.zw, (v_TexCoord - base.xy) / (base.zw - base.xy));
+        vec4 transform = intBitsToFloat(texelFetch(SofronOreRects, at+1));
+        splMaskUV = v_TexCoord * transform.xy + transform.zw;
         return;
     }
     splOreOpacity = 0.0;

@@ -15,7 +15,7 @@ import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 
 /** One immutable snapshot per block atlas, shared with Sodium's chunk mesh workers. */
 public record OreMasks(Map<TextureAtlasSprite, TextureAtlasSprite> pairs, Set<TextureAtlasSprite> leafDetails, ByteBuffer rectangles) {
-    private static volatile OreMasks current = new OreMasks(Map.of(), Set.of(), allocate(4).putInt(0, 0));
+    private static volatile OreMasks current = new OreMasks(Map.of(), Set.of(), allocate(16));
     public static OreMasks current() { return current; }
 
     private static final Set<SpriteContents> leafAliases =
@@ -56,15 +56,16 @@ public record OreMasks(Map<TextureAtlasSprite, TextureAtlasSprite> pairs, Set<Te
         current = new OreMasks(Map.copyOf(pairs), Set.copyOf(leaves), tileIndex(atlas, pairs));
     }
 
-    // Sparse lists per texture tile. A fragment examines only sprites sharing that tile.
+    // One RGBA texel per tile holds the UV transform. Only shared tiles need rectangle tests.
     private static ByteBuffer tileIndex(SpriteLoader.Preparations atlas, Map<TextureAtlasSprite, TextureAtlasSprite> pairs) {
-        if (pairs.isEmpty()) return allocate(4).putInt(0, 0);
-        int tile = Math.max(16, Math.max(atlas.width(), atlas.height()) / 256);
+        if (pairs.isEmpty()) return allocate(16);
+        int tile = Math.max(16, Math.max(atlas.width(), atlas.height()) / 128);
         int columns = Math.ceilDiv(atlas.width(), tile);
         var cells = new java.util.ArrayList<java.util.ArrayList<Integer>>(
             java.util.Collections.nCopies(columns * Math.ceilDiv(atlas.height(), tile), null));
+        var sprites = java.util.List.copyOf(pairs.keySet());
         int descriptor = 0;
-        for (var base : pairs.keySet()) {
+        for (var base : sprites) {
             int x0 = Math.round(base.getU0() * atlas.width()) / tile;
             int y0 = Math.round(base.getV0() * atlas.height()) / tile;
             int x1 = (Math.round(base.getU1() * atlas.width()) - 1) / tile;
@@ -77,22 +78,38 @@ public record OreMasks(Map<TextureAtlasSprite, TextureAtlasSprite> pairs, Set<Te
             }
             descriptor++;
         }
-        int entries = cells.stream().filter(java.util.Objects::nonNull).mapToInt(java.util.List::size).sum();
-        int indices = 3 + cells.size()*2;
-        int records = indices + entries;
-        ByteBuffer data = allocate(4*(records + pairs.size()*8));
-        data.putInt(tile).putInt(columns).putInt(records);
+        int shared = cells.stream().filter(list -> list != null && list.size() > 1)
+            .mapToInt(java.util.List::size).sum();
+        int next = 1 + cells.size();
+        ByteBuffer data = allocate(16*(next + 2*shared));
+        data.putInt(tile).putInt(columns).putLong(0L);
         for (var list : cells) {
-            int count = list == null ? 0 : list.size();
-            data.putInt(indices).putInt(count);
-            indices += count;
+            if (list == null) {
+                data.putLong(0L).putLong(0L);
+            } else if (list.size() == 1) {
+                var base = sprites.get(list.get(0));
+                putTransform(data, base, pairs.get(base));
+            } else {
+                data.putInt(-list.size()).putInt(next).putLong(0L);
+                next += 2*list.size();
+            }
         }
-        for (var list : cells) if (list != null) for (int id : list) data.putInt(id);
-        for (var entry : pairs.entrySet()) {
-            putRect(data, entry.getKey());
-            putRect(data, entry.getValue());
+        for (var list : cells) {
+            if (list == null || list.size() < 2) continue;
+            for (int id : list) {
+                var base = sprites.get(id);
+                putRect(data, base);
+                putTransform(data, base, pairs.get(base));
+            }
         }
         return data.flip().asReadOnlyBuffer();
+    }
+
+    private static void putTransform(ByteBuffer data, TextureAtlasSprite base, TextureAtlasSprite mask) {
+        float sx = (mask.getU1()-mask.getU0()) / (base.getU1()-base.getU0());
+        float sy = (mask.getV1()-mask.getV0()) / (base.getV1()-base.getV0());
+        data.putFloat(sx).putFloat(sy).putFloat(mask.getU0()-sx*base.getU0())
+            .putFloat(mask.getV0()-sy*base.getV0());
     }
 
     private static ByteBuffer allocate(int size) {
