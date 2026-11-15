@@ -19,7 +19,13 @@ abstract class OreMeshMixin extends AbstractBlockRenderContext {
     private int sofron$oreFaceLight(Material material, MutableQuadViewImpl quad, float[] ao, Material original) {
         int bits = material.bits();
         var base = quad.sprite(SpriteFinderCache.forBlockAtlas());
-        if (base == null || !OreMasks.current().pairs().containsKey(base)) return bits;
+        if (base == null) return bits;
+        var atlas = OreMasks.current();
+        if (atlas.leafDetails().contains(base)) {
+            // Store the owning block's low X/Z bits even for overhanging leaf models.
+            return bits | 0x80 | ((pos.getX() & 3) << 3) | ((pos.getZ() & 3) << 5);
+        }
+        if (!atlas.pairs().containsKey(base)) return bits;
         var level = ((LevelSliceAccessor)(Object)slice).sofron$level();
         pl.sofron.light.emissive.OreFades.observe(level.getLightEngine(),pos);
         // The three parity bits identify the block owning a vertex on a shared face.

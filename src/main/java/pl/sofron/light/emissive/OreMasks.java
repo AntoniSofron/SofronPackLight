@@ -4,14 +4,30 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
+import java.util.HashSet;
+import java.util.Collections;
+import java.util.WeakHashMap;
+import net.minecraft.client.renderer.texture.SpriteContents;
 import net.minecraft.resources.Identifier;
 import net.minecraft.client.renderer.texture.SpriteLoader;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 
 /** One immutable snapshot per block atlas, shared with Sodium's chunk mesh workers. */
-public record OreMasks(Map<TextureAtlasSprite, TextureAtlasSprite> pairs, ByteBuffer rectangles) {
-    private static volatile OreMasks current = new OreMasks(Map.of(), allocate(4).putInt(0, 0));
+public record OreMasks(Map<TextureAtlasSprite, TextureAtlasSprite> pairs, Set<TextureAtlasSprite> leafDetails, ByteBuffer rectangles) {
+    private static volatile OreMasks current = new OreMasks(Map.of(), Set.of(), allocate(4).putInt(0, 0));
     public static OreMasks current() { return current; }
+
+    private static final Set<SpriteContents> leafAliases =
+        Collections.synchronizedSet(Collections.newSetFromMap(new WeakHashMap<>()));
+
+    public static boolean isLeafDetail(String path) {
+        return path.endsWith("_leaves_bottom") || path.endsWith("_leaves_top");
+    }
+
+    public static void markLeafAlias(SpriteContents contents) {
+        if (contents != null) leafAliases.add(contents);
+    }
 
     private static final String ALIAS_PREFIX = "ore_mask_alias/";
     public static Identifier maskAlias(Identifier base) {
@@ -20,8 +36,10 @@ public record OreMasks(Map<TextureAtlasSprite, TextureAtlasSprite> pairs, ByteBu
 
     public static void rebuild(SpriteLoader.Preparations atlas) {
         Map<TextureAtlasSprite, TextureAtlasSprite> pairs = new HashMap<>();
+        Set<TextureAtlasSprite> leaves = new HashSet<>();
         atlas.regions().forEach((id, mask) -> {
             String path = id.getPath();
+            if (isLeafDetail(path) || leafAliases.contains(mask.contents())) leaves.add(mask);
             Identifier baseId;
             if (id.getNamespace().equals("sofron_pack_light") && path.startsWith(ALIAS_PREFIX)) {
                 String[] parts = path.substring(ALIAS_PREFIX.length()).split("/", 2);
@@ -35,7 +53,7 @@ public record OreMasks(Map<TextureAtlasSprite, TextureAtlasSprite> pairs, ByteBu
             var base = atlas.regions().get(baseId);
             if (base != null) pairs.put(base, mask);
         });
-        current = new OreMasks(Map.copyOf(pairs), tileIndex(atlas, pairs));
+        current = new OreMasks(Map.copyOf(pairs), Set.copyOf(leaves), tileIndex(atlas, pairs));
     }
 
     // Sparse lists per texture tile. A fragment examines only sprites sharing that tile.

@@ -185,6 +185,16 @@ void main() {
     // Transform the chunk-local vertex position into world model space
     vec3 translation = u_RegionOffset + _get_draw_translation(_draw_id);
     vec3 position = _vert_position + translation;
+    if ((_material_params & 128u) != 0u) {
+        vec2 low = vec2((uvec2(_material_params) >> uvec2(3u, 5u)) & 3u);
+        vec2 center = floor((_vert_position.xz - low + 1.5) * 0.25) * 4.0 + low + 0.5;
+        vec2 delta = center + translation.xz + splCameraFractionAndDarken.xz - splPlayerRelative.xz;
+        if (dot(delta, delta) >= 128.0 * 128.0) {
+            gl_Position = vec4(2.0, 0.0, 0.0, 1.0);
+            return;
+        }
+        spl_OreLight = 2; // Ordinary leaf detail: skip the emissive sentinel.
+    }
     spl_SurfaceCameraPos = position;
 #ifndef OIT_ALPHA_ONLY
     splStationaryVertex = spl_evalChunkLights(position);
@@ -223,7 +233,7 @@ void main() {
     splOreOpacity = 0.0;
     splMaskUV = vec2(0.0);
 #ifndef OIT_ALPHA_ONLY
-    if (spl_OreLight != 0) {
+    if (spl_OreLight == 1) {
         vec3 parity = vec3((uvec3(_material_params) >> uvec3(4u,5u,6u)) & uvec3(1u));
         ivec3 local = ivec3(floor((_vert_position - parity + 0.5) * 0.5) * 2.0 + parity);
         ivec3 block = ivec3(round(translation + splCameraFractionAndDarken.xyz)) + local;

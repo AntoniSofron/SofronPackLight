@@ -13,6 +13,22 @@ import pl.sofron.light.emissive.OreMasks;
 /** Atlas single entries can load a block from a directory outside textures/block or under an alias. */
 @Mixin(SingleFile.class)
 abstract class SingleOreSpriteMixin {
+    @org.spongepowered.asm.mixin.injection.Redirect(method = "run", at = @At(value = "INVOKE", target =
+        "Lnet/minecraft/client/renderer/texture/atlas/SpriteSource$Output;add(Lnet/minecraft/resources/Identifier;Lnet/minecraft/server/packs/resources/Resource;)V"))
+    private void sofron$preserveLeafAlias(SpriteSource.Output output, Identifier id,
+            net.minecraft.server.packs.resources.Resource resource) {
+        var source = ((SingleFile)(Object)this).resourceId();
+        if (!source.equals(id) && OreMasks.isLeafDetail(source.getPath())) {
+            output.add(id, loader -> {
+                var contents = loader.loadSprite(id, resource);
+                OreMasks.markLeafAlias(contents);
+                return contents;
+            });
+        } else {
+            output.add(id, resource);
+        }
+    }
+
     @Inject(method = "run", at = @At("TAIL"))
     private void sofron$addMask(ResourceManager manager, SpriteSource.Output output, CallbackInfo ci) {
         var source = (SingleFile)(Object)this;
