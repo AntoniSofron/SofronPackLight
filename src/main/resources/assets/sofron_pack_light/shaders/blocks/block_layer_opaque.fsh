@@ -23,6 +23,7 @@ layout(std140) uniform SofronLights {
     vec4 splCameraFractionAndDarken;
     vec4 splPlayerRelative;
     vec4 splAtlasCamera;
+    vec4 splVoxelCamera;
 };
 layout(location = 9) in vec4 splStationaryVertex;
 layout(location = 10) flat in float splOreOpacity;
@@ -46,13 +47,8 @@ vec4 spl_voxelFetch(int offset, int side, ivec3 q) {
 // original lightmap and vertex shading remain the base rendering.
 vec4 spl_evalDynamicSurface(vec3 cameraRelativePos) {
     int offset = 0;
-    int side = voxelWord(3);
-    if (side != 33) return vec4(0.0);
-    ivec3 origin = ivec3(voxelWord(0), voxelWord(1), voxelWord(2));
-    // All math is local to the voxel volume.
-    vec3 world = cameraRelativePos + splCameraFractionAndDarken.xyz +
-        vec3(ivec3(splLightHeader.x, splLightHeader.y, splLightHeader.w) - origin);
-    origin = ivec3(0);
+    const int side = 33;
+    vec3 world = cameraRelativePos + splVoxelCamera.xyz;
     // 0.9.54: determine the outward visible surface normal from the CURRENT
     // rasterized triangle, instead of comparing against the PREVIOUS frame's
     // camera position stored in the atlas. That old camera coordinate jumps
@@ -78,7 +74,7 @@ vec4 spl_evalDynamicSurface(vec3 cameraRelativePos) {
     float signSide = geometric[axis] >= 0.0 ? 1.0 : -1.0;
     vec3 airPoint = world;
     airPoint[axis] = plane + signSide * 0.51;
-    vec3 centered = airPoint - vec3(origin) - vec3(0.5);
+    vec3 centered = airPoint - vec3(0.5);
     ivec3 q = ivec3(floor(centered));
     q[axis] = int(floor(centered[axis] + 0.5));
     vec3 t = smoothstep(vec3(0.0),vec3(1.0),fract(centered));
@@ -149,6 +145,8 @@ vec4 sampleRGSS(sampler2D source, vec2 uv, vec2 pixelSize) {
     float transitionEnd = minPixelSize * 2.0;
     float blendFactor = smoothstep(transitionStart, transitionEnd, maxTexelSize);
 
+    if (blendFactor == 0.0) return sampleNearest(source, uv, pixelSize, du, dv, texelScreenSize);
+
     float duLength = length(du);
     float dvLength = length(dv);
     float minDerivative = min(duLength, dvLength);
@@ -172,6 +170,8 @@ vec4 sampleRGSS(sampler2D source, vec2 uv, vec2 pixelSize) {
     }
     rgssColor *= 0.25;
 
+    if (blendFactor == 1.0) return rgssColor;
+
     vec4 nearestColor = sampleNearest(source, uv, pixelSize, du, dv, texelScreenSize);
 
     return mix(nearestColor, rgssColor, blendFactor);
@@ -179,16 +179,6 @@ vec4 sampleRGSS(sampler2D source, vec2 uv, vec2 pixelSize) {
 
 void main() {
     vec4 color = u_UseRGSS ? sampleRGSS(u_BlockTex, v_TexCoord, u_TexelSize) : sampleNearest(u_BlockTex, v_TexCoord, u_TexelSize);
-    // Sofron 0.9.21 paired resource pack encodes emissive pixels with alpha=254.
-    // Decode from mip 0 to avoid interpolation/mipmaps erasing the sentinel.
-    // The original alpha=255 and fully transparent pixels are unchanged.
-    ivec2 splTextureSize = textureSize(u_BlockTex, 0);
-    ivec2 splPixel = clamp(ivec2(floor(v_TexCoord * vec2(splTextureSize))), ivec2(0), splTextureSize - ivec2(1));
-    vec4 rawTexel = texelFetch(u_BlockTex, splPixel, 0);
-    float splRawAlpha = rawTexel.a;
-    float splEmissivePixel = 1.0 - step(0.45, abs(splRawAlpha * 255.0 - 254.0));
-    if (spl_OreLight != 0) splEmissivePixel = 0.0;
-    vec3 splUnlitTexel = rawTexel.rgb;
     vec3 surfaceAlbedo = color.rgb * spl_UnlitVertexColor;
     color *= v_Color; // Apply per-vertex color modulator
 
@@ -201,11 +191,22 @@ void main() {
     #ifdef OIT_ALPHA_ONLY
     executeAlphaOnlyPhase(gl_FragCoord.z, color.a);
     #else
-    // IMPORTANT: vanilla block-light coordinate near 1.0 is NOT an emissive flag.
-    // A normal ground surface inside a cluster of torches also has near-maximal
-    // block light. Suppressing RGB there created the gray center/red outer ring.
-    // Protect only pixels explicitly marked emissive in the paired resource pack.
-    // Restore their unlit texel below after both stationary and moving lighting.
+#ifndef SOFRON_STATIONARY_ONLY
+    if (spl_OreLight != 0 && splOreOpacity == 0.0 && splAtlasCamera.w == 0.0 && splLightHeader.z == 0) {
+        fragColor = calculateFinalColor(color);
+        return;
+    }
+#endif
+    ivec2 splTextureSize = textureSize(u_BlockTex, 0);
+    float splEmissivePixel = 0.0;
+    vec3 splUnlitTexel = vec3(0.0);
+    if (spl_OreLight == 0) {
+        ivec2 pixel = clamp(ivec2(floor(v_TexCoord * vec2(splTextureSize))), ivec2(0), splTextureSize - 1);
+        vec4 raw = texelFetch(u_BlockTex, pixel, 0);
+        splEmissivePixel = 1.0 - step(0.45, abs(raw.a * 255.0 - 254.0));
+        splUnlitTexel = raw.rgb;
+    }
+#ifndef SOFRON_STATIONARY_ONLY
     float splFullbrightPreserve = splEmissivePixel;
     // Placed block lights: COLORIZE existing light, never add a second beam.
 
@@ -213,21 +214,6 @@ void main() {
     vec3 splStationary=splStationarySample.rgb;
     float stationaryEnergy=splStationarySample.a;
     float daylightMask = 1.0 - smoothstep(0.38, 0.85, spl_Sunlit);
-    if (stationaryEnergy > 0.0001) {
-        // Local tint only: vanilla lightmap is the source of brightness.
-        // Normalized hue is evaluated from individual nearby emitters;
-        // strength affects blend amount, not added lighting or source hue.
-        vec3 sourceHue = clamp(splStationary, 0.0, 1.0);
-        float blend = (1.0 - exp(-stationaryEnergy * 1.15))
-                    * daylightMask * (1.0 - splFullbrightPreserve);
-        vec3 base = color.rgb;
-        // Highly saturated reds have low perceived luminance relative to green.
-        // Give red-dominant hues a modest channel boost without changing vanilla light.
-        float redDominance = clamp(sourceHue.r - max(sourceHue.g, sourceHue.b), 0.0, 1.0);
-        float perceptualCompensation = 1.0 + 0.65 * redDominance;
-        vec3 chromatic = min(vec3(1.0), base * sourceHue * perceptualCompensation);
-        color.rgb = mix(base, chromatic, clamp(blend, 0.0, 0.92));
-    }
     // 0.9.36 diagnostic output uses the *same* chunk-atlas sample as normal shading.
     // raw: RGB contribution, strength: magnitude, mask: daylight/emissive suppression.
     // These modes intentionally replace terrain colors and bypass emissive preservation.
@@ -259,6 +245,7 @@ void main() {
             color.rgb += surfaceAlbedo * max(newLight - oldLight, vec3(0.0)) * hue * movingMask;
         }
     }
+#endif
     // Emissive is self-lit: preserve its unlightmapped base texture color
     // after BOTH stationary tint and moving light. Never brighten neighbors.
     color.rgb = mix(color.rgb, splUnlitTexel * spl_UnlitVertexColor, splEmissivePixel);

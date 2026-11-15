@@ -2,7 +2,6 @@ package pl.sofron.light.runtime;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.util.ArrayDeque;
 import java.util.List;
 import pl.sofron.light.engine.LightOcclusion;
 
@@ -29,22 +28,24 @@ public final class DynamicVoxelField {
     public static Snapshot propagate(int centerX,int centerY,int centerZ,
                                      List<Emitter> emitters, LightOcclusion occlusion) {
         int x0=centerX-SIZE/2, y0=centerY-SIZE/2, z0=centerZ-SIZE/2;
-        int[] brightness = new int[CELLS];
-        int[] r=new int[CELLS],g=new int[CELLS],b=new int[CELLS];
+        int[] packed = new int[CELLS];
+        byte[] obstruction = new byte[CELLS];
+        byte[] seen = new byte[CELLS];
+        int[] queue = new int[CELLS];
         for (Emitter emitter:emitters) {
             int sx=emitter.x-x0, sy=emitter.y-y0, sz=emitter.z-z0;
             if(sx<0||sy<0||sz<0||sx>=SIZE||sy>=SIZE||sz>=SIZE)continue;
             int origin=index(sx,sy,sz);
-            byte[] seen=new byte[CELLS];
-            ArrayDeque<Integer> queue=new ArrayDeque<>();
+            int head=0, tail=0;
             int sourceLevel=Math.max(0,Math.min(15,emitter.level));
             if(sourceLevel==0)continue;
             seen[origin]=(byte)sourceLevel;
-            queue.add(origin);
-            while(!queue.isEmpty()) {
-                int at=queue.removeFirst();
+            queue[tail++]=origin;
+            while(head < tail) {
+                int at=queue[head++];
                 int level=Byte.toUnsignedInt(seen[at]);
-                if(level>brightness[at])brightness[at]=level;
+                int old=packed[at];
+                int rgb=old & 0xffffff;
                 int vx=at%SIZE, vy=at/(SIZE*SIZE), vz=(at/SIZE)%SIZE;
                 int dist=sourceLevel - level;
                 if(dist<=Math.max(0,emitter.tintRange)) {
@@ -54,10 +55,10 @@ public final class DynamicVoxelField {
                     int vr=Math.round(Math.max(0,Math.min(255,emitter.red))*tintWeight);
                     int vg=Math.round(Math.max(0,Math.min(255,emitter.green))*tintWeight);
                     int vb=Math.round(Math.max(0,Math.min(255,emitter.blue))*tintWeight);
-                    if(vr>r[at])r[at]=vr;
-                    if(vg>g[at])g[at]=vg;
-                    if(vb>b[at])b[at]=vb;
+                    rgb = (Math.max(vr,(old>>>16)&255)<<16) | (Math.max(vg,(old>>>8)&255)<<8)
+                        | Math.max(vb,old&255);
                 }
+                packed[at]=(Math.max(level,old>>>24)<<24) | rgb;
                 if(level<=1) continue;
                 for(int face=0;face<6;face++) {
                     int nx=vx+DX[face],ny=vy+DY[face],nz=vz+DZ[face];
@@ -65,14 +66,15 @@ public final class DynamicVoxelField {
                     int next=index(nx,ny,nz);
                     int nextLevel=level-1;
                     if(Byte.toUnsignedInt(seen[next])>=nextLevel)continue;
-                    if(occlusion.blocks(x0+nx,y0+ny,z0+nz))continue;
+                    if(obstruction[next]==0) obstruction[next]=(byte)(occlusion.blocks(x0+nx,y0+ny,z0+nz)?2:1);
+                    if(obstruction[next]==2)continue;
                     seen[next]=(byte)nextLevel;
-                    queue.addLast(next);
+                    queue[tail++]=next;
                 }
             }
+            // Each cell enters the FIFO once per emitter in descending brightness order.
+            for (int k=0; k<tail; k++) seen[queue[k]]=0;
         }
-        int[] packed=new int[CELLS];
-        for(int i=0;i<CELLS;i++) packed[i]=((brightness[i]&255)<<24)|((r[i]&255)<<16)|((g[i]&255)<<8)|(b[i]&255);
         return new Snapshot(x0,y0,z0,packed);
     }
     /** header (x0,y0,z0,size) followed by packed RGBA voxels */

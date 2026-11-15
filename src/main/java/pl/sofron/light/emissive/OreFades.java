@@ -27,6 +27,8 @@ public final class OreFades {
     private final AtomicBoolean needsUpdate = new AtomicBoolean(true);
     private int lastX, lastY, lastZ;
     private float nextExpiry = Float.POSITIVE_INFINITY;
+    private float animationEnd;
+    public float shaderTime() { return Math.min(seconds(), animationEnd); }
     private int age;
     private int lastDarken = -1;
     private ByteBuffer bytes = pack();
@@ -102,6 +104,7 @@ public final class OreFades {
                         boolean on = illuminated(level, BlockPos.of(pos), darken);
                         if (on != (start != null && start.on)) {
                             lit.put(pos, new Fade(now, start == null ? 0f : start.value(now), on));
+                            animationEnd = Math.nextUp(now + DURATION);
                             changed = true;
                         }
                     }

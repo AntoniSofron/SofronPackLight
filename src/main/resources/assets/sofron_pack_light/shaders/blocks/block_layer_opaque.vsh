@@ -51,6 +51,7 @@ layout(std140) uniform SofronLights {
     vec4 splCameraFractionAndDarken;
     vec4 splPlayerRelative;
     vec4 splAtlasCamera;
+    vec4 splVoxelCamera;
 };
 layout(location = 9) out vec4 splStationaryVertex;
 uniform isamplerBuffer SofronLightAtlas;
@@ -182,6 +183,8 @@ void main() {
     _vert_init();
     spl_OreLight = int((_material_params >> 3u) & 1u);
 
+    if (spl_OreLight == 0 && (_material_params & 16u) != 0u) spl_OreLight = 2;
+
     // Transform the chunk-local vertex position into world model space
     vec3 translation = u_RegionOffset + _get_draw_translation(_draw_id);
     vec3 position = _vert_position + translation;
@@ -197,7 +200,7 @@ void main() {
     }
     spl_SurfaceCameraPos = position;
 #ifndef OIT_ALPHA_ONLY
-    splStationaryVertex = spl_evalChunkLights(position);
+    splStationaryVertex = splVoxelCamera.w > 0.0 ? spl_evalChunkLights(position) : vec4(0.0);
 #else
     splStationaryVertex = vec4(0);
 #endif
@@ -222,6 +225,14 @@ void main() {
     v_Color = _vert_color * texture(u_LightTex, _vert_tex_light_coord);
     spl_Sunlit = texture(u_LightTex, vec2(0.03125, _vert_tex_light_coord.y)).r;
     spl_LightCoord = _vert_tex_light_coord;
+    // Bake the stationary tint into the existing vertex color before rasterization.
+    if (splStationaryVertex.a > 0.0001 && splLightHeader.z == 0) {
+        vec3 hue = clamp(splStationaryVertex.rgb, 0.0, 1.0);
+        float daylight = 1.0 - smoothstep(0.38, 0.85, spl_Sunlit);
+        float blend = min((1.0 - exp(-splStationaryVertex.a * 1.15)) * daylight, 0.92);
+        float redBoost = 1.0 + 0.65 * max(0.0, hue.r - max(hue.g, hue.b));
+        v_Color.rgb = mix(v_Color.rgb, min(vec3(1.0), v_Color.rgb * hue * redBoost), blend);
+    }
 #else
     spl_UnlitVertexColor = _vert_color.rgb;
     v_Color = _vert_color;

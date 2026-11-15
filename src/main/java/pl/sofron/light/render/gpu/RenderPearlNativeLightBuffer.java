@@ -17,6 +17,7 @@ public final class RenderPearlNativeLightBuffer implements AutoCloseable {
     private GpuBuffer buffer;
     private boolean closed;
     private long uploads;
+    private final ByteBuffer submitted = ByteBuffer.allocateDirect(RenderPearlLightUniformPayload.BYTE_SIZE);
 
     public RenderPearlNativeLightBuffer(GpuDevice device) {
         this.device = Objects.requireNonNull(device, "device");
@@ -28,6 +29,7 @@ public final class RenderPearlNativeLightBuffer implements AutoCloseable {
         ByteBuffer bytes = payload.readOnlyData();
         if (bytes.remaining() != RenderPearlLightUniformPayload.BYTE_SIZE)
             throw new IllegalArgumentException("Invalid std140 payload size: " + bytes.remaining());
+        if (buffer != null && bytes.mismatch(submitted) < 0) return;
         if (buffer == null) {
             buffer = device.createBuffer(() -> "Sofron Pack Light RGB uniform",
                 GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_COPY_DST,
@@ -36,6 +38,7 @@ public final class RenderPearlNativeLightBuffer implements AutoCloseable {
         CommandEncoder encoder = device.createCommandEncoder();
         encoder.writeToBuffer(buffer.slice(), bytes);
         encoder.submit();
+        submitted.put(0, bytes, 0, bytes.capacity());
         uploads++;
     }
 

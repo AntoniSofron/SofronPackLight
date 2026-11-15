@@ -16,6 +16,6 @@ public final class OreView {
         out.putFloat((float)(eye.x - origin.getX())).putFloat((float)(eye.y - origin.getY()))
            .putFloat((float)(eye.z - origin.getZ())).putFloat(client.level.getSkyDarken());
         out.putFloat((float)(player.x - origin.getX())).putFloat((float)(player.y - origin.getY()))
-           .putFloat((float)(player.z - origin.getZ())).putFloat(OreFades.current().seconds());
+           .putFloat((float)(player.z - origin.getZ())).putFloat(OreFades.current().shaderTime());
     }
 }

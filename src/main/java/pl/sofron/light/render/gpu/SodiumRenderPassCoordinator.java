@@ -64,8 +64,6 @@ public final class SodiumRenderPassCoordinator {
         int originX = (mc.player.blockPosition().getX() >> 4)-distance;
         int originZ = (mc.player.blockPosition().getZ() >> 4)-distance;
         var field = SofronPackLightClient.VOXELS.field();
-        payload.update(debugMode, originX, originZ, x, y, z, field != null);
-        nativeBuffer.upload(payload);
         if (voxelBuffer == null || field != lastVoxels) {
             if (voxelBuffer == null) voxelBuffer = new RenderPearlChunkAtlasBuffer(RenderSystem.getDevice(), "SofronVoxels");
             voxelBytes.clear();
@@ -94,6 +92,8 @@ public final class SodiumRenderPassCoordinator {
             lastOriginX = originX;
             lastOriginZ = originZ;
         }
+        payload.update(debugMode, originX, originZ, x, y, z, field, diagnosticAtlasReferences != 0);
+        nativeBuffer.upload(payload);
     }
 
     /** Only binds an already uploaded buffer; never calls CommandEncoder while a render pass is open. */

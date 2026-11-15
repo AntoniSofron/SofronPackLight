@@ -29,6 +29,8 @@ public final class ChunkLightIndex {
     private final ChunkLightBuckets buckets = new ChunkLightBuckets();
     private Object lastLevel;
     private long ticks;
+    private int previousX, previousZ, previousRadius;
+    private long nextDiscovery;
     private long revision;
     private long lastRuleRevision = Long.MIN_VALUE;
     public long revision() { return revision; }
@@ -48,13 +50,19 @@ public final class ChunkLightIndex {
         if (lastLevel != client.level) { indexed.clear(); buckets.clear(); lastLevel = client.level; ticks = 0; revision++; }
         ticks++;
         long currentRuleRevision = BlockLightRules.revision();
-        if (lastRuleRevision != currentRuleRevision) {
+        boolean rulesChanged = lastRuleRevision != currentRuleRevision;
+        if (rulesChanged) {
             indexed.clear(); buckets.clear(); revision++;
             lastRuleRevision = currentRuleRevision;
         }
         int cx = client.player.blockPosition().getX() >> 4;
         int cz = client.player.blockPosition().getZ() >> 4;
         int radius = Math.max(1, client.options.renderDistance().get());
+        // Chunk loads and luminous edits wake the index immediately. While idle,
+        // revisit the view once a second for unloads and periodic refreshes.
+        if (ticks > 1 && ticks < nextDiscovery && dirty.isEmpty() && cx == previousX
+                && cz == previousZ && radius == previousRadius && !rulesChanged) return;
+        previousX=cx; previousZ=cz; previousRadius=radius;
         // Remove stale entries outside view distance, including previously visited regions.
         indexed.keySet().removeIf(k -> {
             boolean stale = Math.abs(k.x - cx) > radius + 1 || Math.abs(k.z - cz) > radius + 1
@@ -79,6 +87,7 @@ public final class ChunkLightIndex {
             .comparingInt((ChunkKey k) -> dirty.contains(k) ? -1 : indexed.containsKey(k) ? 1 : 0)
             .thenComparingLong(k -> indexed.containsKey(k) ? indexed.get(k).scannedTick : -1L)
             .thenComparingInt(k -> Math.max(Math.abs(k.x-cx), Math.abs(k.z-cz))));
+        nextDiscovery = ticks + (candidates.size() > SCANS_PER_TICK ? 1 : 20);
         int scans = Math.min(SCANS_PER_TICK, candidates.size());
         for (int i = 0; i < scans; i++) {
             ChunkKey key = candidates.get(i);
